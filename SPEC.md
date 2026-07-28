@@ -493,10 +493,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+
 @dataclass(frozen=True)
 class PackageRequest:
     raw: str
     exact: bool
+
 
 @dataclass(frozen=True)
 class ResolvedPackage:
@@ -506,11 +508,13 @@ class ResolvedPackage:
     installed_versions: tuple[str, ...]
     repository_versions: tuple[str, ...]
 
+
 @dataclass(frozen=True)
 class ConfigMutation:
     operation: Literal["set", "unset"]
     atom: str
     values: tuple[str, ...]
+
 
 @dataclass(frozen=True)
 class FileChange:
@@ -740,14 +744,18 @@ Define application-specific exceptions.
 class PtoolsError(Exception):
     pass
 
+
 class PackageNotFoundError(PtoolsError):
     pass
+
 
 class AmbiguousPackageError(PtoolsError):
     pass
 
+
 class InvalidConfigError(PtoolsError):
     pass
+
 
 class PortageIntegrationError(PtoolsError):
     pass
@@ -842,6 +850,7 @@ Provide adapter interfaces and fakes.
 
 ```python
 from typing import Protocol
+
 
 class PortageBackend(Protocol):
     def resolve(self, request: str) -> ResolvedPackage: ...
