@@ -2,8 +2,8 @@
 
 A straight guide for anyone on a Gentoo box who wants to build, test, and
 install ptools by hand — no CI, no containers. ptools is a standard Python 3
-package (hatchling, `src/` layout) with a pytest suite, exposing three
-commands: `ptools`, `puse`, and `pkw`.
+package (hatchling, `src/` layout) with a pytest suite, exposing two commands:
+`puse` and `pkw`. (`ptools` is the distribution name — it is not a command.)
 
 ---
 
@@ -12,20 +12,26 @@ commands: `ptools`, `puse`, and `pkw`.
 ```
 pyproject.toml          # hatchling build backend, deps, tool config
 src/ptools/             # the package
-  cli.py                # `ptools` entry point (main)
+  puse.py pkw.py        # the two console entry points (first-class CLIs)
+  cli_common.py         # shared argv handling, output, exit-code mapping
   domain.py services.py config_store.py errors.py
-  portage_adapter.py    # talks to real portage; has a MockPortageBackend for tests
-  compat/puse.py compat/pkw.py   # `puse` / `pkw` entry points (legacy-style CLIs)
+  portage_adapter.py    # backend Protocol + MockPortageBackend + factory
+  portage_real.py       # the real portage integration (imports `portage`)
+scripts/                # discover_environment.py (Milestone D)
 tests/unit/             # pytest suite (uses the mock backend — no Gentoo needed)
+tests/integration/      # real-portage tests, marked `integration`
 ```
 
 Entry points (from `pyproject.toml`):
 
-| Command  | Target                       |
-|----------|------------------------------|
-| `ptools` | `ptools.cli:main`            |
-| `puse`   | `ptools.compat.puse:main`    |
-| `pkw`    | `ptools.compat.pkw:main`     |
+| Command  | Target             |
+|----------|--------------------|
+| `puse`   | `ptools.puse:main` |
+| `pkw`    | `ptools.pkw:main`  |
+
+Both CLIs call the service layer directly; neither shells out to the other, and
+neither escalates privilege. Writing to a real `/etc/portage` means running them
+under `sudo`/as root yourself; otherwise they exit 5.
 
 Requires **Python ≥ 3.11**. Runtime deps: none declared — the real portage
 backend imports `portage`, which is already present on any Gentoo box.
@@ -95,9 +101,9 @@ pytest -q tests/unit/test_services.py::TestName   # target one test
 pytest --no-cov                 # quick run without the coverage gate
 ```
 
-`portage_adapter.py` is excluded from coverage (`[tool.coverage.run] omit`),
-because it's the thin layer that talks to real portage and is exercised by
-integration tests, not unit tests.
+`portage_real.py` is excluded from coverage (`[tool.coverage.run] omit`),
+because it's the layer that talks to real portage and is exercised by the
+integration tests on a Gentoo host, not by unit tests.
 
 Type-check and lint (both configured in `pyproject.toml`; mypy is `strict`):
 
@@ -111,9 +117,10 @@ ruff check .
 ## 4. Run the tools (after install)
 
 ```bash
-ptools --help
-puse --show app-editors/vim     # read-only: prints effective USE state
-pkw  --help
+puse app-editors/vim              # read-only: effective USE state
+puse app-editors/vim python -gtk  # needs root: writes package.use/ptools
+pkw --testing app-editors/vim     # needs root: writes package.accept_keywords/ptools
+puse --help ; pkw --help
 ```
 
 ---
@@ -122,13 +129,19 @@ pkw  --help
 
 - **Unit tests** run anywhere — they inject `MockPortageBackend`, so no Gentoo
   required (handy for editing on a non-Gentoo machine).
-- **The real CLIs** use the live backend in `portage_adapter.py`, which imports
-  `portage`. That needs system python (Gentoo), not a bare venv.
-- **Write safety:** the write paths (e.g. `puse --change`) edit your real
-  `/etc/portage` config via `config_store.py`. Read paths (`--show`, `--help`)
-  are safe. Before exercising writes on a box you care about, back up the
-  target (`sudo cp -a /etc/portage/package.use{,.bak}`) or keep `/etc` under
-  git and `git checkout` to revert.
+- **The real CLIs** use `portage_real.py`, which imports `portage`. That needs
+  system python (Gentoo), not a bare venv. Without it both commands exit 7.
+- **Write safety:** write paths edit your real `/etc/portage` config through
+  `config_store.py`; show paths and `--dry-run` never write. Point
+  `PTOOLS_CONFIG_ROOT` at a scratch directory to exercise writes without
+  touching the live configuration:
+
+  ```bash
+  PTOOLS_CONFIG_ROOT=/tmp/sandbox-portage puse app-editors/vim python
+  ```
+
+  ptools takes no backups, so on a box you care about either use that override,
+  or keep `/etc` under git and `git checkout` to revert.
 
 ---
 
@@ -199,10 +212,11 @@ cd /var/db/repos/localrepo/app-portage/ptools
 sudo ebuild ptools-9999.ebuild clean test install
 
 # merge for real (live ebuild needs unmasking):
-echo '=app-portage/ptools-9999 **' | sudo tee /etc/portage/package.accept_keywords/ptools
+# NB: not the file named `ptools` — that one belongs to the tool itself.
+echo '=app-portage/ptools-9999 **' | sudo tee /etc/portage/package.accept_keywords/99-local
 sudo emerge -av app-portage/ptools
 
-ptools --help
+puse --help && pkw --help
 equery files app-portage/ptools
 sudo emerge -C app-portage/ptools     # clean uninstall
 ```

@@ -52,26 +52,34 @@ NEVER:
 ```yaml
 Done:
   Packaging: hatchling, src/ layout, pyproject.toml, requires-python >=3.11
+  Command surface (Milestone A): puse + pkw are first-class argparse CLIs
+    (src/ptools/puse.py, src/ptools/pkw.py) sharing src/ptools/cli_common.py.
+    The umbrella cli.py and the compat/ subprocess shims are DELETED;
+    [project.scripts] exposes only puse and pkw.
+  Exit-code mapping (Milestone B): full 0/2/3/4/5/6/7/8 table on
+    PtoolsError.exit_code; results on stdout, errors (incl. JSON errors) on stderr
+  Config store (Milestone C): preservation, inline comments, duplicate-fail with
+    opt-in --merge-duplicates, symlink refusal, flat-layout detection, atomic
+    replace preserving mode/ownership, never world-writable, NO sudo
   Core services: ReadOnlyService + MutationService (src/ptools/services.py)
-  Config store: ConfigStore with dry_run (src/ptools/config_store.py)
   Portage adapter: PortageBackend Protocol + MockPortageBackend
-                   (src/ptools/portage_adapter.py; get_portage_backend factory)
+                   (src/ptools/portage_adapter.py; get_portage_backend factory);
+                   real integration split out to src/ptools/portage_real.py
   Domain + errors: src/ptools/domain.py, src/ptools/errors.py
-  Test suite: tests/unit/* pass with the mock backend; 85% coverage gate in pyproject
-  CI: .github/workflows/ci.yml runs pytest on the gumbo gentoo-dev runner
+  Test suite: tests/unit/* green on the mock backend (85% gate; ~97% actual);
+    tests/integration/test_real_portage.py written, skips without portage
+  Discovery script: scripts/discover_environment.py (run by CI on gumbo)
+  CI: .github/workflows/ci.yml runs pytest + environment discovery on the
+      gumbo gentoo-dev runner
 
-Exists but MUST be replaced (see Command Surface + Milestone A):
-  src/ptools/cli.py         : an "ptools <group> <verb>" UMBRELLA command — drop it
-  src/ptools/compat/puse.py : shells out to `ptools use` via subprocess — rewrite as first-class
-  src/ptools/compat/pkw.py  : shells out to `ptools keyword` — rewrite as first-class
-  pyproject [project.scripts]: currently ptools/puse/pkw — target is puse/pkw only
+Environment override:
+  PTOOLS_CONFIG_ROOT replaces <PORTAGE_CONFIGROOT>/etc/portage — this is how
+  sandbox/chroot testing writes without touching a live configuration.
 
 Invalid / not real yet:
-  docs/environment.md : values are MOCKED ("PORTAGE_VERSION: Mocked",
-                        "ARCH: amd64 (mocked/default)"). This does NOT satisfy
-                        real discovery. Must be regenerated from gumbo (Milestone D).
-  Exit-code mapping   : only 1/3/4 implemented; full table (2,5,6,7,8) incomplete
-  Gentoo validation   : none performed on a real system
+  docs/environment.md : still placeholder; marked NOT YET DISCOVERED. Must be
+                        regenerated from gumbo output (Milestone D).
+  Gentoo validation   : none performed on a real system (Milestones D, E)
 ```
 
 Legacy originals `ptk.py`/`puse.py`/`pkw.py` are **deleted from the tree**; they
@@ -200,7 +208,7 @@ Never scrape `emerge` output.
 # 6. Remaining Milestones (dependency-ordered)
 
 ```yaml
-A. Refactor CLI to first-class puse/pkw:
+A. DONE - Refactor CLI to first-class puse/pkw:
    What: Delete the `ptools` umbrella (cli.py) and the subprocess shims in
      compat/. Implement `puse` and `pkw` as standalone argparse CLIs that call
      ReadOnlyService/MutationService/ConfigStore directly, per §4. Fold
@@ -211,13 +219,13 @@ A. Refactor CLI to first-class puse/pkw:
      set, unset, --testing, --exact, --dry-run, and --json paths have passing
      unit tests using the mock backend; ruff+mypy+pytest green at >=85%.
 
-B. Complete exit-code mapping:
+B. DONE - Complete exit-code mapping:
    What: Map every failure to §4's table (2 usage, 5 permission, 6 invalid config,
      7 portage, 8 write) across both commands, results on stdout / errors on stderr.
    Done when: tests assert each code for a representative failure; JSON error
      objects accompany non-zero exits; no success text is emitted on stderr.
 
-C. Harden the managed config store:
+C. DONE (unit + sandbox; chroot evidence lands with E) - Harden the managed config store:
    What: Preserve comments/blank/unknown/unrelated lines; reject invalid selected
      entries; duplicate atoms fail (opt-in --merge-duplicates); deterministic
      render; atomic replace preserving mode/ownership.

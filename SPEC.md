@@ -169,7 +169,13 @@ find /etc/portage/package.accept_keywords -maxdepth 2 -type f -print 2>/dev/null
 find /etc/portage/package.keywords -maxdepth 2 -type f -print 2>/dev/null
 ```
 
-Ask before implementation when any of these are unresolved:
+Ask before implementation when any of these are unresolved.
+
+> **RESOLVED** in `build_PROMPT.md` §3: directory layout for both files, one
+> managed aggregate file named `ptools`, **no privilege escalation** (run as
+> root yourself; an unwritable target exits 5), and the original command names
+> kept as the only two commands. `UNKNOWN_CONFIG_LAYOUT` is the one item still
+> pending real-system confirmation (Milestone D).
 
 ```yaml
 UNKNOWN_CONFIG_LAYOUT:
@@ -333,6 +339,13 @@ DRY_RUN_OUTPUT:
 
 ## 7. Proposed Command Interface
 
+> **SUPERSEDED.** This section is the original proposal. The command surface was
+> resolved in `build_PROMPT.md` §3-§4: two first-class commands, `puse` and
+> `pkw`, flat and terse (`puse [OPTIONS] PACKAGE [TOKEN ...]`), with inspection
+> folded into the bare-`PACKAGE` form. There is no `ptools` executable, no
+> subcommand groups, and no `--interactive` mode. Ambiguity exits **4**, not 2.
+> The `ptools ...` invocations below are kept only as a record of the proposal.
+
 Provide one primary executable.
 
 ```bash
@@ -386,6 +399,11 @@ ptools --interactive package resolve PACKAGE
 Scripted operation must remain deterministic.
 
 ## 8. Compatibility Interface
+
+> **SUPERSEDED.** Resolved: `puse` and `pkw` are retained as the *only*
+> commands, and they are not wrappers — they call the service layer directly.
+> The legacy mode switches are not implemented; see `docs/legacy-behavior.md`
+> for how each one maps onto the new shape.
 
 Evaluate whether legacy commands should be retained as wrappers.
 
