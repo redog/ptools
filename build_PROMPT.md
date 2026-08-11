@@ -101,8 +101,11 @@ Still open:
                     to widen the SSH gate). A human on gumbo runs:
                       ./start-env.sh --build-gentoo     # once, populates gentoo-pkgs/
                       ./update-configs.sh && ./start-env.sh --rebuild --persist
-                    Until then every ptools CI run queues forever (3 queued as of
-                    2026-08-11).
+                    Until then every ptools CI run queues forever (4 queued as of
+                    2026-08-11). Confirmed by API, not just inferred from the
+                    queue: `gh api repos/redog/ptools/actions/runners` returns
+                    total_count 0, so no runner has ever registered - this is
+                    bring-up still pending, NOT a registered runner gone offline.
   Milestone F     : everything except the gumbo leg is DONE and green -
                     ruff check, ruff format --check, mypy strict, pytest
                     (156 passed, 97.15% vs the 85% gate), python -m build
