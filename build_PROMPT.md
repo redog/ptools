@@ -71,15 +71,24 @@ Done:
   Discovery script: scripts/discover_environment.py (run by CI on gumbo)
   CI: .github/workflows/ci.yml runs pytest + environment discovery on the
       gumbo gentoo-dev runner
+  Real-system validation (Milestones D+E): performed in an amd64 stage3 chroot
+    on liminal, because gumbo has no registered self-hosted runner (its job has
+    been queued since 2026-08-11). docs/environment.md now holds real values;
+    docs/gentoo-validation.md records the evidence, including portage actually
+    consuming a generated package.use entry.
+  Chroot harness: scripts/chroot_validate.sh + scripts/chroot_inner.sh
+                  + scripts/verify_consumption.py
 
 Environment override:
   PTOOLS_CONFIG_ROOT replaces <PORTAGE_CONFIGROOT>/etc/portage — this is how
   sandbox/chroot testing writes without touching a live configuration.
 
-Invalid / not real yet:
-  docs/environment.md : still placeholder; marked NOT YET DISCOVERED. Must be
-                        regenerated from gumbo output (Milestone D).
-  Gentoo validation   : none performed on a real system (Milestones D, E)
+Still open:
+  Gumbo runner    : register/start the self-hosted runner so CI validates on a
+                    second, independent Gentoo host (the workflow already runs
+                    the integration suite + environment discovery there)
+  Milestone F     : artifacts build and pass twine check locally; F also
+                    requires the integration suite green on gumbo
 ```
 
 Legacy originals `ptk.py`/`puse.py`/`pkw.py` are **deleted from the tree**; they
@@ -232,7 +241,7 @@ C. DONE (unit + sandbox; chroot evidence lands with E) - Harden the managed conf
    Done when: unit + sandbox tests prove preservation, duplicate-fail, and that an
      interrupted candidate write never yields a partial target.
 
-D. REAL environment discovery (replaces mocked docs/environment.md):
+D. DONE (via stage3 chroot; re-confirm on gumbo when it is back) - REAL environment discovery:
    What: On gumbo (via the runner) or a local stage3 chroot, capture real
      PYTHON_VERSION, PORTAGE_VERSION, PORTAGE_MODULE, ROOT, EPREFIX,
      PORTAGE_CONFIGROOT, ARCH, PACKAGE_USE_LAYOUT, PACKAGE_KEYWORD_LAYOUT, and
@@ -242,7 +251,7 @@ D. REAL environment discovery (replaces mocked docs/environment.md):
      integration tests pass on gumbo for a category-qualified atom, an exact atom,
      an invalid atom, and an ambiguous unqualified name.
 
-E. Validate on current Gentoo:
+E. DONE (stage3 chroot; see docs/gentoo-validation.md) - Validate on current Gentoo:
    What: Read-only, non-root dry-run, sandbox/chroot write (file preserved), and
      evidence that portage actually consumes the generated entries.
    Done when: docs/gentoo-validation.md records profile, portage+python versions,

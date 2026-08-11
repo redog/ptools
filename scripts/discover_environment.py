@@ -34,7 +34,10 @@ def main() -> int:
         "PORTAGE_CONFIGROOT": str(config_root),
         "ARCH": settings.get("ARCH", ""),
         "ACCEPT_KEYWORDS": settings.get("ACCEPT_KEYWORDS", ""),
-        "PROFILE": settings.get("PORTAGE_PROFILE", ""),
+        # PORTAGE_PROFILE is only set inside an ebuild environment; the resolved
+        # profile lives on the config object itself.
+        "PROFILE": str(Path(getattr(settings, "profile_path", "") or ".").resolve()),
+        "PROFILE_STACK": str(len(getattr(settings, "profiles", ()))),
         "PACKAGE_USE_LAYOUT": layout(portage_dir / "package.use"),
         "PACKAGE_KEYWORD_LAYOUT": layout(portage_dir / "package.accept_keywords"),
         "LEGACY_PACKAGE_KEYWORDS": layout(portage_dir / "package.keywords"),
