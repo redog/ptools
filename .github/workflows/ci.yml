@@ -1,0 +1,48 @@
+# Generated/maintained by the gumbo-dev skill. Safe to hand-edit outside the
+# "(managed)" blocks; those get regenerated on update.
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**/*.py'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**/*.py'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      # One OS leg failing must not cancel the others.
+      fail-fast: false
+      matrix:
+# >>> gumbo-dev:matrix (managed) — edit legs via the gumbo-dev skill
+        include:
+          - os: gentoo-dev
+            runs-on: [self-hosted, gumbo, gentoo-dev]
+            platform: linux
+# <<< gumbo-dev:matrix
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+# >>> gumbo-dev:deps (managed) — edit system deps via the gumbo-dev skill
+      - name: Verify toolchain (Gentoo)
+        if: matrix.os == 'gentoo-dev'
+        run: |
+          # Python and portage ship with the Gentoo base container; nothing to
+          # emerge. Fail fast if that assumption ever breaks.
+          python --version
+          python -c "import portage; print('portage', portage.VERSION)"
+# <<< gumbo-dev:deps
+
+      - name: Syntax check (py_compile)
+        if: matrix.platform == 'linux'
+        run: python -m py_compile pkw.py ptk.py puse.py
