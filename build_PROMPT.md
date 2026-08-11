@@ -83,12 +83,35 @@ Environment override:
   PTOOLS_CONFIG_ROOT replaces <PORTAGE_CONFIGROOT>/etc/portage — this is how
   sandbox/chroot testing writes without touching a live configuration.
 
+  Documentation (Milestone F): README carries every section SPEC §23 requires
+    (purpose, background, supported Gentoo/Python, installation, read-only /
+    dry-run / write examples, target policy, exit codes, JSON, limitations, and
+    a migration table each for puse and pkw). tests/unit/test_docs.py
+    machine-checks it: every ```bash example is executed against the mock
+    backend, the exit-code table is compared to the error taxonomy, the
+    documented targets to what the tools report, and [project.scripts] to
+    puse+pkw only. Stale SPEC sections are marked SUPERSEDED.
+
 Still open:
-  Gumbo runner    : register/start the self-hosted runner so CI validates on a
-                    second, independent Gentoo host (the workflow already runs
-                    the integration suite + environment discovery there)
-  Milestone F     : artifacts build and pass twine check locally; F also
-                    requires the integration suite green on gumbo
+  Gumbo runner    : the CONFIG is already correct on both sides - dev-env
+                    containers.list enables gentoo-dev and projects.list has
+                    `redog/ptools : gentoo-dev`. What is missing is bring-up ON
+                    the gumbo host, which by design has no inbound path from
+                    liminal (see dev-env README "Security boundary" - do NOT try
+                    to widen the SSH gate). A human on gumbo runs:
+                      ./start-env.sh --build-gentoo     # once, populates gentoo-pkgs/
+                      ./update-configs.sh && ./start-env.sh --rebuild --persist
+                    Until then every ptools CI run queues forever (3 queued as of
+                    2026-08-11).
+  Milestone F     : everything except the gumbo leg is DONE and green -
+                    ruff check, ruff format --check, mypy strict, pytest
+                    (156 passed, 97.15% vs the 85% gate), python -m build
+                    (sdist + wheel), python -m twine check (both PASSED), and
+                    the documentation/migration work above. The single
+                    outstanding criterion is the integration suite passing on
+                    gumbo as a second, independent Gentoo host. (It already
+                    passes on real portage in the stage3 chroot: 12 passed,
+                    see docs/gentoo-validation.md §1.)
 ```
 
 Legacy originals `ptk.py`/`puse.py`/`pkw.py` are **deleted from the tree**; they
@@ -257,7 +280,8 @@ E. DONE (stage3 chroot; see docs/gentoo-validation.md) - Validate on current Gen
    Done when: docs/gentoo-validation.md records profile, portage+python versions,
      layouts, and exact results incl. portage consuming a generated sandbox entry.
 
-F. Release candidate (no publish):
+F. BLOCKED on the gumbo runner only - everything else DONE (see §2):
+   Release candidate (no publish):
    What: machine-checked docs + migration notes; all gates green; build artifacts.
    Done when: ruff check + format check pass; mypy passes; pytest >=85%; all
      integration tests pass on gumbo; wheel + sdist build; twine check passes.
