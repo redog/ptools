@@ -244,7 +244,3 @@ pytest --no-cov -m "not integration"   # fast, env-agnostic
 mypy src/ptools && ruff check . # types + lint
 pip install -e .                # editable dev install
 ```
-
-> Housekeeping: the repo currently tracks `__pycache__/`, `.coverage`, and
-> pytest cache `.pyc` files. Those are build artifacts and are better added to
-> `.gitignore` and removed from the tree.

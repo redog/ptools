@@ -3,6 +3,16 @@
 > **Building ptools?** Start with [`build_PROMPT.md`](build_PROMPT.md) — it holds
 > the current state, resolved decisions, and remaining milestones. This SPEC is
 > the behavioral reference behind it.
+>
+> **Command surface: superseded throughout.** This document was written while
+> an umbrella `ptools <noun> <verb>` command was still on the table, and its
+> examples still use that shape. It was resolved against: the only commands are
+> `puse` and `pkw`, flat and terse (`puse [OPTIONS] PACKAGE [TOKEN ...]`), and
+> `ptools` is the distribution name, not a command. Read every `ptools use set
+> X lua` here as `puse X lua`, and `ptools keyword set X '~amd64'` as `pkw X
+> '~amd64'`. The *behavior* each example describes still stands — only the
+> spelling changed. See `build_PROMPT.md` §4 for the live contract and the
+> README for user-facing docs.
 
 
 ```yaml
@@ -939,6 +949,13 @@ CLI_TESTS:
 
 ## 22. Packaging
 
+> **PARTLY SUPERSEDED.** The `[project.scripts]` block below is the *original*
+> proposal and no longer matches the tree: there is no `ptools` command and no
+> `ptools.compat` package. The resolved entry points are `puse =
+> "ptools.puse:main"` and `pkw = "ptools.pkw:main"`, and they are checked
+> against `pyproject.toml` by `tests/unit/test_docs.py`. Minimum Python was
+> resolved to 3.11 (Milestone D confirmed 3.14.6 on the validation host).
+
 Use `pyproject.toml`.
 
 ```toml
@@ -1192,6 +1209,11 @@ pytest tests/integration/test_sandbox_writes.py
 
 ### Phase 8: Legacy Compatibility
 
+> **SUPERSEDED — no compatibility layer was built.** `puse` and `pkw` are the
+> primary commands rather than wrappers over one, so there is nothing to wrap
+> and no deprecation guidance to emit. The legacy mode switches map onto the new
+> shape in `docs/legacy-behavior.md` and in the README's two migration tables.
+
 Tasks:
 
 ```yaml
@@ -1207,8 +1229,8 @@ Completion Check:
 ```bash
 puse --help
 pkw --help
-pytest tests/unit/test_compat_puse.py
-pytest tests/unit/test_compat_pkw.py
+# The compat suites below were never written; the equivalent coverage lives in
+# tests/unit/test_puse.py, tests/unit/test_pkw.py and tests/unit/test_docs.py.
 ```
 
 ### Phase 9: Gentoo Validation
