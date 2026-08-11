@@ -56,12 +56,43 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e . pytest pytest-cov
 
+      - name: Verify portage is visible inside the venv
+        if: matrix.os == 'gentoo-dev'
+        run: |
+          . .venv/bin/activate
+          # The integration suite is guarded by importorskip("portage"). If the
+          # venv cannot see the system module the whole suite would skip and the
+          # job would still go green, silently voiding milestones D and F. Fail
+          # here instead, where the cause is obvious.
+          python -c "import portage; print('portage', portage.VERSION)"
+
       - name: Run test suite
         if: matrix.platform == 'linux'
         run: |
           . .venv/bin/activate
           # pyproject bakes in --cov=ptools --cov-fail-under=85
           pytest
+
+      - name: Assert the integration suite actually ran
+        if: matrix.os == 'gentoo-dev'
+        run: |
+          . .venv/bin/activate
+          # A skipped integration test is not a passing one. Milestone F needs
+          # real-portage coverage on this host, so treat any skip as a failure.
+          # --no-cov: pyproject bakes in --cov-fail-under=85, which the 12
+          # integration tests alone cannot meet. The full run above owns the
+          # coverage gate; this run only proves the suite executed.
+          pytest -m integration -q --no-cov --junitxml=integration.xml
+          python - <<'PY'
+          import sys, xml.etree.ElementTree as ET
+
+          suite = ET.parse("integration.xml").getroot().find("testsuite")
+          ran = int(suite.get("tests", 0))
+          skipped = int(suite.get("skipped", 0))
+          print(f"integration: {ran} collected, {skipped} skipped")
+          if ran == 0 or skipped:
+              sys.exit("integration tests did not run against real portage")
+          PY
 
       - name: Discover real environment
         if: matrix.os == 'gentoo-dev'
