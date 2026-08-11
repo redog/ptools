@@ -131,4 +131,10 @@ assertion that a resolved cpv carries a version.
   `package.use` content and a flat-layout file. The flat-layout refusal is unit
   tested but has not been seen against a real flat `/etc/portage/package.use`.
 - A second architecture; only amd64 was exercised.
-- The gumbo runner leg, which is still queued (no runner registered).
+- The gumbo runner leg, which is still queued (the repo has zero registered
+  runners, so the queued jobs cannot start; bring-up is a human step on the
+  gumbo host itself). The workflow now fails that leg loudly if the integration
+  suite skips: it asserts `portage` imports inside the venv, and re-runs
+  `pytest -m integration --junitxml` rejecting any run with zero tests or any
+  skip. Without those guards a runner missing the portage module would have
+  reported green while validating nothing.
