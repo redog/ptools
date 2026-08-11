@@ -1,126 +1,214 @@
+"""Read/modify/write the ptools-managed portage config files.
+
+Rules this module enforces (build_PROMPT.md §5):
+
+* comments, blank lines, and every line for another atom survive byte-for-byte;
+* duplicate atoms are an error unless the caller opts into merging;
+* the target is replaced atomically, preserving mode and ownership;
+* an interrupted write never leaves a partial or truncated target;
+* no privilege escalation - an unwritable target is a permission error.
+"""
+
 import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from ptools.domain import ConfigMutation, FileChange
-from ptools.errors import InvalidConfigError
+from ptools.domain import ConfigMutation, MutationResult
+from ptools.errors import InvalidConfigError, PermissionDeniedError, WriteError
+
+
+@dataclass(frozen=True)
+class ParsedLine:
+    """One physical line, split into the parts we may need to re-render."""
+
+    raw: str
+    indent: str
+    atom: str | None
+    values: tuple[str, ...]
+    comment: str
+
+
+def parse_line(raw: str) -> ParsedLine:
+    body, sep, comment = raw.partition("#")
+    indent = body[: len(body) - len(body.lstrip())]
+    tokens = body.split()
+    return ParsedLine(
+        raw=raw,
+        indent=indent,
+        atom=tokens[0] if tokens else None,
+        values=tuple(tokens[1:]),
+        comment=f"{sep}{comment}".rstrip("\r\n") if sep else "",
+    )
+
+
+def render_line(line: ParsedLine, values: tuple[str, ...]) -> str:
+    rendered = f"{line.indent}{line.atom} {' '.join(values)}".rstrip()
+    if line.comment:
+        rendered = f"{rendered} {line.comment}"
+    return f"{rendered}\n"
+
+
+def parse_file(content: str) -> list[ParsedLine]:
+    return [parse_line(raw) for raw in content.splitlines(keepends=True)]
+
+
+def apply_set(values: tuple[str, ...], tokens: tuple[str, ...]) -> tuple[str, ...]:
+    """Add each token, dropping the token it contradicts (``lua`` vs ``-lua``)."""
+    result = list(values)
+    for token in tokens:
+        base = token.removeprefix("-")
+        counterpart = base if token.startswith("-") else f"-{base}"
+        if counterpart in result:
+            result.remove(counterpart)
+        if token not in result:
+            result.append(token)
+    return tuple(result)
+
+
+def apply_unset(values: tuple[str, ...], tokens: tuple[str, ...]) -> tuple[str, ...]:
+    """Drop both the plain and the negated form of each token."""
+    drop = set()
+    for token in tokens:
+        base = token.removeprefix("-")
+        drop.update({base, f"-{base}"})
+    return tuple(value for value in values if value not in drop)
 
 
 @dataclass
 class ConfigStore:
     dry_run: bool = False
+    merge_duplicates: bool = False
 
-    def apply_mutation(self, file_path: Path, mutation: ConfigMutation) -> FileChange | None:
-        """
-        Parses the config file, modifies or adds the entry for the specific atom,
-        and writes it back atomically.
-        """
-        content = ""
-        if file_path.exists():
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
+    # -- reading ---------------------------------------------------------
 
-        lines = content.splitlines(keepends=True)
-        new_lines = []
-        found = False
-
-        for line in lines:
-            stripped = line.strip()
-            # Preserve empty lines and comments
-            if not stripped or stripped.startswith("#"):
-                new_lines.append(line)
-                continue
-
-            parts = stripped.split()
-            if not parts:
-                new_lines.append(line)
-                continue
-
-            entry_atom = parts[0]
-            if entry_atom == mutation.atom:
-                if found:
-                    raise InvalidConfigError(
-                        f"Duplicate atom {mutation.atom} found in {file_path}. Please merge duplicates."
-                    )
-                found = True
-
-                # Apply mutation
-                current_values = set(parts[1:])
-                for value in mutation.values:
-                    if mutation.operation == "set":
-                        if value.startswith("-") and value[1:] in current_values:
-                            current_values.remove(value[1:])
-                        elif not value.startswith("-") and f"-{value}" in current_values:
-                            current_values.remove(f"-{value}")
-                        current_values.add(value)
-                    elif mutation.operation == "unset":
-                        # Remove both 'flag' and '-flag'
-                        clean_value = value.removeprefix("-")
-                        current_values.discard(clean_value)
-                        current_values.discard(f"-{clean_value}")
-
-                if current_values:
-                    sorted_values = sorted(current_values)
-                    new_line = f"{entry_atom} {' '.join(sorted_values)}\n"
-                    new_lines.append(new_line)
-                # If no values left, the line is removed completely
-            else:
-                new_lines.append(line)
-
-        if not found and mutation.operation == "set":
-            if new_lines and not new_lines[-1].endswith("\n"):
-                new_lines[-1] = new_lines[-1] + "\n"
-            sorted_values = sorted(set(mutation.values))
-            new_lines.append(f"{mutation.atom} {' '.join(sorted_values)}\n")
-
-        new_content = "".join(new_lines)
-
-        if content == new_content:
-            return None
-
-        change = FileChange(path=file_path, before=content, after=new_content)
-
-        if not self.dry_run:
-            self._write_atomic(file_path, new_content)
-
-        return change
-
-    def _write_atomic(self, file_path: Path, content: str) -> None:
-        if os.geteuid() != 0 and str(file_path).startswith("/etc/"):
-            import subprocess
-
-            fd, temp_path = tempfile.mkstemp(prefix=".ptools-tmp-")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    f.write(content)
-                    f.flush()
-                    os.fsync(f.fileno())
-
-                subprocess.run(["sudo", "mkdir", "-p", str(file_path.parent)], check=True)
-                subprocess.run(["sudo", "mv", temp_path, str(file_path)], check=True)
-                subprocess.run(["sudo", "chmod", "644", str(file_path)], check=True)
-            finally:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-            return
-
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        fd, temp_path = tempfile.mkstemp(dir=file_path.parent, prefix=".ptools-tmp-")
+    def read(self, file_path: Path) -> str:
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(content)
-                f.flush()
-                os.fsync(f.fileno())
+            return file_path.read_text(encoding="utf-8") if file_path.exists() else ""
+        except PermissionError as exc:
+            raise PermissionDeniedError(f"cannot read {file_path}: {exc.strerror}") from exc
+        except UnicodeDecodeError as exc:
+            raise InvalidConfigError(f"{file_path} is not valid UTF-8: {exc}") from exc
+        except OSError as exc:
+            raise InvalidConfigError(f"cannot read {file_path}: {exc.strerror}") from exc
 
-            if file_path.exists():
-                stat = file_path.stat()
-                os.chmod(temp_path, stat.st_mode)
-                os.chown(temp_path, stat.st_uid, stat.st_gid)
+    def read_values(self, file_path: Path, atom: str) -> tuple[str, ...]:
+        """Values currently managed for ``atom``; empty if it has no entry."""
+        lines = parse_file(self.read(file_path))
+        values: list[str] = []
+        for index in self._select(lines, atom, file_path):
+            values.extend(lines[index].values)
+        return tuple(dict.fromkeys(values))
+
+    def _select(self, lines: list[ParsedLine], atom: str, file_path: Path) -> list[int]:
+        indexes = [i for i, line in enumerate(lines) if line.atom == atom]
+        if len(indexes) > 1 and not self.merge_duplicates:
+            raise InvalidConfigError(
+                f"duplicate entries for {atom} in {file_path} "
+                f"(lines {', '.join(str(i + 1) for i in indexes)}); "
+                f"re-run with --merge-duplicates to combine them"
+            )
+        return indexes
+
+    # -- mutating --------------------------------------------------------
+
+    def apply_mutation(self, file_path: Path, mutation: ConfigMutation) -> MutationResult:
+        before = self.read(file_path)
+        lines = parse_file(before)
+        selected = self._select(lines, mutation.atom, file_path)
+
+        old_values: tuple[str, ...] = ()
+        for index in selected:
+            if not lines[index].values:
+                raise InvalidConfigError(
+                    f"entry for {mutation.atom} in {file_path} line {index + 1} has no values"
+                )
+            old_values += lines[index].values
+        old_values = tuple(dict.fromkeys(old_values))
+
+        if mutation.operation == "set":
+            new_values = apply_set(old_values, mutation.values)
+        else:
+            new_values = apply_unset(old_values, mutation.values)
+
+        rendered = [line.raw for line in lines]
+        if selected:
+            keep = selected[0]
+            if new_values:
+                rendered[keep] = render_line(lines[keep], new_values)
             else:
-                os.chmod(temp_path, 0o644)
+                rendered[keep] = ""
+            for index in selected[1:]:
+                rendered[index] = ""
+        elif new_values:
+            if rendered and not rendered[-1].endswith("\n"):
+                rendered[-1] += "\n"
+            rendered.append(f"{mutation.atom} {' '.join(new_values)}\n")
 
+        after = "".join(rendered)
+        result = MutationResult(
+            path=file_path,
+            before=before,
+            after=after,
+            added=tuple(v for v in new_values if v not in old_values),
+            removed=tuple(v for v in old_values if v not in new_values),
+        )
+
+        if result.changed and not self.dry_run:
+            self.write_atomic(file_path, after)
+        return result
+
+    # -- writing ---------------------------------------------------------
+
+    def write_atomic(self, file_path: Path, content: str) -> None:
+        if file_path.is_symlink():
+            raise WriteError(f"refusing to write through a symlink: {file_path}")
+
+        parent = file_path.parent
+        if parent.exists() and not parent.is_dir():
+            raise InvalidConfigError(
+                f"{parent} is a regular file; ptools requires the directory layout "
+                f"(convert it with: mv {parent} {parent}.tmp && mkdir {parent} && "
+                f"mv {parent}.tmp {parent}/00-local)"
+            )
+
+        try:
+            parent.mkdir(parents=True, exist_ok=True)
+            fd, temp_name = tempfile.mkstemp(dir=parent, prefix=".ptools-")
+        except PermissionError as exc:
+            raise PermissionDeniedError(
+                f"cannot write to {parent}: {exc.strerror}; re-run as root"
+            ) from exc
+        except OSError as exc:
+            raise WriteError(f"cannot prepare {parent}: {exc.strerror}") from exc
+
+        temp_path = Path(temp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            self._preserve_metadata(file_path, temp_path)
             os.replace(temp_path, file_path)
-        except Exception:
-            os.remove(temp_path)
+        except PermissionError as exc:
+            temp_path.unlink(missing_ok=True)
+            raise PermissionDeniedError(
+                f"cannot replace {file_path}: {exc.strerror}; re-run as root"
+            ) from exc
+        except OSError as exc:
+            temp_path.unlink(missing_ok=True)
+            raise WriteError(f"cannot write {file_path}: {exc.strerror}") from exc
+        except BaseException:
+            # Interrupted part-way: the candidate is discarded, the target is
+            # untouched because os.replace() never ran.
+            temp_path.unlink(missing_ok=True)
             raise
+
+    def _preserve_metadata(self, file_path: Path, temp_path: Path) -> None:
+        if file_path.exists():
+            stat = file_path.stat()
+            os.chmod(temp_path, stat.st_mode & 0o7777 & ~0o002)
+            if os.geteuid() == 0:
+                os.chown(temp_path, stat.st_uid, stat.st_gid)
+        else:
+            os.chmod(temp_path, 0o644)

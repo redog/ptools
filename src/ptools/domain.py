@@ -1,11 +1,8 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
-
-@dataclass(frozen=True)
-class PackageRequest:
-    raw: str
-    exact: bool
+Operation = Literal["set", "unset"]
 
 
 @dataclass(frozen=True)
@@ -19,16 +16,21 @@ class ResolvedPackage:
 
 @dataclass(frozen=True)
 class ConfigMutation:
-    operation: Literal["set", "unset"]
+    operation: Operation
     atom: str
     values: tuple[str, ...]
 
 
-from pathlib import Path
-
-
 @dataclass(frozen=True)
-class FileChange:
+class MutationResult:
+    """Outcome of applying one mutation to one managed file."""
+
     path: Path
     before: str
     after: str
+    added: tuple[str, ...]
+    removed: tuple[str, ...]
+
+    @property
+    def changed(self) -> bool:
+        return self.before != self.after

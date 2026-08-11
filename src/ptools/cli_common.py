@@ -1,0 +1,196 @@
+"""Shared runtime for the first-class ``puse`` and ``pkw`` commands.
+
+Both commands are flat and terse: ``cmd [OPTIONS] PACKAGE [TOKEN ...]``. They
+call the service layer directly - there is no umbrella command and nothing here
+ever spawns a subprocess.
+"""
+
+import argparse
+import json
+import os
+import re
+import sys
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, NoReturn
+
+from ptools.errors import PtoolsError, UsageError
+from ptools.portage_adapter import PortageBackend, get_portage_backend
+
+#: Options understood by both commands. Anything else starting with ``--`` is a
+#: usage error, which keeps ``-lua`` and ``-*`` usable as plain operands.
+GLOBAL_OPTIONS = frozenset(
+    {
+        "--exact",
+        "--dry-run",
+        "--json",
+        "--quiet",
+        "--no-color",
+        "--unset",
+        "--merge-duplicates",
+        "--help",
+    }
+)
+
+USE_FLAG_RE = re.compile(r"^-?[A-Za-z0-9][A-Za-z0-9+_@-]*$")
+KEYWORD_RE = re.compile(r"^(\*\*|-?\*|[-~]?[A-Za-z0-9][A-Za-z0-9+_.-]*)$")
+
+_COLORS = {"bold": "1", "dim": "2", "red": "31", "green": "32", "yellow": "33"}
+
+
+class ArgumentParser(argparse.ArgumentParser):
+    """argparse, but parse failures become exit-code-2 UsageErrors."""
+
+    def error(self, message: str) -> NoReturn:
+        raise UsageError(message)
+
+
+def add_global_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--exact", action="store_true", help="target =cat/pkg-ver, not cat/pkg")
+    parser.add_argument("--unset", action="store_true", help="remove the listed managed tokens")
+    parser.add_argument(
+        "--merge-duplicates",
+        action="store_true",
+        help="combine duplicate entries for the atom instead of failing",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
+    parser.add_argument("--json", action="store_true", help="emit a single JSON object on stdout")
+    parser.add_argument("--quiet", action="store_true", help="suppress human-readable output")
+    parser.add_argument("--no-color", action="store_true", help="never emit ANSI colour")
+
+
+def partition_argv(argv: Sequence[str], options: frozenset[str]) -> tuple[list[str], list[str]]:
+    """Split argv into options and operands.
+
+    Operands are taken literally, so ``-lua`` and ``-*`` reach the parser as
+    values rather than as unknown short options. A bare ``--`` ends the options.
+    """
+    found: list[str] = []
+    operands: list[str] = []
+    end_of_options = False
+    for arg in argv:
+        if end_of_options:
+            operands.append(arg)
+        elif arg == "--":
+            end_of_options = True
+        elif arg in ("-h", "--help"):
+            found.append("--help")
+        elif arg.startswith("--"):
+            if arg.split("=", 1)[0] not in options:
+                raise UsageError(f"unrecognized option: {arg}")
+            found.append(arg)
+        else:
+            operands.append(arg)
+    return found, operands
+
+
+def validate_tokens(tokens: Sequence[str], pattern: re.Pattern[str], label: str) -> tuple[str, ...]:
+    for token in tokens:
+        if not pattern.match(token):
+            raise UsageError(f"invalid {label}: {token!r}")
+    return tuple(tokens)
+
+
+def resolve_config_root(backend: PortageBackend) -> Path:
+    """Portage's configuration root, never assumed to be ``/``.
+
+    ``PTOOLS_CONFIG_ROOT`` overrides it outright, which is how sandbox and
+    chroot testing writes somewhere other than a live /etc/portage.
+    """
+    override = os.environ.get("PTOOLS_CONFIG_ROOT")
+    if override:
+        return Path(override)
+    return Path(backend.get_setting("PORTAGE_CONFIGROOT", "/") or "/") / "etc" / "portage"
+
+
+@dataclass
+class Output:
+    prog: str
+    json_mode: bool = False
+    quiet: bool = False
+    color: bool = False
+
+    def paint(self, text: str, style: str) -> str:
+        if not self.color:
+            return text
+        return f"\033[{_COLORS[style]}m{text}\033[0m"
+
+    def result(
+        self, payload: dict[str, Any], render: Callable[["Output", dict[str, Any]], str]
+    ) -> None:
+        if self.json_mode:
+            print(json.dumps(payload), file=sys.stdout)
+        elif not self.quiet:
+            print(render(self, payload), file=sys.stdout)
+
+    def failure(self, exc: PtoolsError, usage: str | None = None) -> int:
+        if self.json_mode:
+            print(
+                json.dumps(
+                    {"error": exc.kind, "message": str(exc), "exit_code": exc.exit_code},
+                ),
+                file=sys.stderr,
+            )
+        else:
+            if usage:
+                print(usage.rstrip(), file=sys.stderr)
+            print(f"{self.prog}: {self.paint('error', 'red')}: {exc}", file=sys.stderr)
+        return exc.exit_code
+
+
+def render_mutation(out: Output, payload: dict[str, Any]) -> str:
+    prefix = out.paint("[dry-run] ", "yellow") if payload["dry_run"] else ""
+    atom = out.paint(payload["atom"], "bold")
+    if not payload["changed"]:
+        return f"{prefix}{atom}: no change"
+    parts = [out.paint(f"+{value}", "green") for value in payload["added"]]
+    parts += [out.paint(f"-{value}", "red") for value in payload["removed"]]
+    return f"{prefix}{atom}: {' '.join(parts)} -> {payload['target']}"
+
+
+def render_field(out: Output, label: str, values: Sequence[str] | str, empty: str = "-") -> str:
+    text = " ".join(values) if not isinstance(values, str) else values
+    return f"  {out.paint(f'{label}:', 'dim'):<24}{text or empty}"
+
+
+def dispatch(
+    *,
+    prog: str,
+    parser: argparse.ArgumentParser,
+    options: frozenset[str],
+    argv: Sequence[str] | None,
+    backend: PortageBackend | None,
+    run: Callable[[argparse.Namespace, PortageBackend], dict[str, Any]],
+    render: Callable[[Output, dict[str, Any]], str],
+) -> int:
+    """Parse, execute, print, and map any failure onto its exit code."""
+    raw = list(sys.argv[1:] if argv is None else argv)
+    # --json / --no-color must be honoured even if parsing itself fails.
+    out = Output(
+        prog=prog,
+        json_mode="--json" in raw,
+        color=color_enabled("--no-color" in raw),
+    )
+    try:
+        found, operands = partition_argv(raw, options)
+        args = parser.parse_args([*found, "--", *operands])
+        out = Output(
+            prog=prog,
+            json_mode=args.json,
+            quiet=args.quiet,
+            color=color_enabled(args.no_color),
+        )
+        if backend is None:
+            backend = get_portage_backend()
+        payload = run(args, backend)
+    except PtoolsError as exc:
+        return out.failure(exc, parser.format_usage() if isinstance(exc, UsageError) else None)
+    out.result(payload, render)
+    return 0
+
+
+def color_enabled(no_color: bool) -> bool:
+    if no_color or os.environ.get("NO_COLOR"):
+        return False
+    return sys.stdout.isatty()

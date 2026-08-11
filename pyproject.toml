@@ -11,9 +11,10 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-ptools = "ptools.cli:main"
-puse = "ptools.compat.puse:main"
-pkw = "ptools.compat.pkw:main"
+# `ptools` is the distribution name, not a command: puse and pkw are the only
+# things anyone types.
+puse = "ptools.puse:main"
+pkw = "ptools.pkw:main"
 
 [tool.pytest.ini_options]
 markers = [
@@ -30,5 +31,6 @@ target-version = "py311"
 
 [tool.coverage.run]
 omit = [
-    "src/ptools/portage_adapter.py",
+    # Requires a real Gentoo host; exercised by the integration tests on gumbo.
+    "src/ptools/portage_real.py",
 ]

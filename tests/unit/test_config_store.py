@@ -1,90 +1,295 @@
+import os
 
 import pytest
 
-from ptools.config_store import ConfigStore
+from ptools.config_store import ConfigStore, apply_set, apply_unset, parse_line
 from ptools.domain import ConfigMutation
-from ptools.errors import InvalidConfigError
+from ptools.errors import InvalidConfigError, PermissionDeniedError, WriteError
+
+ATOM = "app-editors/neovim"
 
 
-def test_config_store_add_new_entry(tmp_path):
-    file_path = tmp_path / "package.use/ptools"
-    store = ConfigStore()
-
-    mutation = ConfigMutation(operation="set", atom="app-editors/neovim", values=("lua", "python"))
-    change = store.apply_mutation(file_path, mutation)
-
-    assert change is not None
-    assert "app-editors/neovim lua python\n" in change.after
-    assert file_path.read_text() == "app-editors/neovim lua python\n"
+def mutation(operation, *values, atom=ATOM):
+    return ConfigMutation(operation=operation, atom=atom, values=values)
 
 
-def test_config_store_modify_existing(tmp_path):
-    file_path = tmp_path / "ptools"
-    file_path.write_text("app-editors/neovim lua\n")
-    store = ConfigStore()
-
-    mutation = ConfigMutation(operation="set", atom="app-editors/neovim", values=("-lua", "python"))
-    change = store.apply_mutation(file_path, mutation)
-
-    assert change is not None
-    assert file_path.read_text() == "app-editors/neovim -lua python\n"
+def test_parse_line_splits_atom_values_and_comment():
+    line = parse_line("  app-editors/neovim lua -python # keep lua\n")
+    assert line.indent == "  "
+    assert line.atom == "app-editors/neovim"
+    assert line.values == ("lua", "-python")
+    assert line.comment == "# keep lua"
 
 
-def test_config_store_remove_values(tmp_path):
-    file_path = tmp_path / "ptools"
-    file_path.write_text("app-editors/neovim lua python\n")
-    store = ConfigStore()
-
-    mutation = ConfigMutation(operation="unset", atom="app-editors/neovim", values=("lua",))
-    store.apply_mutation(file_path, mutation)
-
-    assert file_path.read_text() == "app-editors/neovim python\n"
+def test_parse_line_treats_full_comment_as_no_atom():
+    assert parse_line("# just a comment\n").atom is None
+    assert parse_line("\n").atom is None
 
 
-def test_config_store_remove_last_value(tmp_path):
-    file_path = tmp_path / "ptools"
-    file_path.write_text("app-editors/neovim lua\n# comment\n")
-    store = ConfigStore()
+@pytest.mark.parametrize(
+    ("values", "tokens", "expected"),
+    [
+        ((), ("lua",), ("lua",)),
+        (("lua",), ("lua",), ("lua",)),
+        (("-lua",), ("lua",), ("lua",)),
+        (("lua", "python"), ("-lua",), ("python", "-lua")),
+        (("~amd64",), ("-*",), ("~amd64", "-*")),
+    ],
+)
+def test_apply_set(values, tokens, expected):
+    assert apply_set(values, tokens) == expected
 
-    mutation = ConfigMutation(operation="unset", atom="app-editors/neovim", values=("lua",))
-    store.apply_mutation(file_path, mutation)
 
-    assert file_path.read_text() == "# comment\n"
+def test_apply_unset_drops_both_polarities():
+    assert apply_unset(("lua", "-python", "x"), ("lua", "python")) == ("x",)
 
 
-def test_config_store_preserves_comments_and_blanks(tmp_path):
-    content = "# Top comment\n\napp-editors/neovim lua\n\n# Bottom comment\n"
-    file_path = tmp_path / "ptools"
-    file_path.write_text(content)
-    store = ConfigStore()
+def test_add_new_entry_creates_file(tmp_path):
+    path = tmp_path / "package.use" / "ptools"
+    result = ConfigStore().apply_mutation(path, mutation("set", "lua", "python"))
 
-    mutation = ConfigMutation(operation="set", atom="sys-apps/portage", values=("test",))
-    store.apply_mutation(file_path, mutation)
+    assert result.changed is True
+    assert result.added == ("lua", "python")
+    assert path.read_text() == f"{ATOM} lua python\n"
+    assert path.stat().st_mode & 0o777 == 0o644
 
-    expected = (
-        "# Top comment\n\napp-editors/neovim lua\n\n# Bottom comment\nsys-apps/portage test\n"
+
+def test_set_reports_only_real_changes(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} lua\n")
+
+    result = ConfigStore().apply_mutation(path, mutation("set", "lua", "python"))
+
+    assert result.added == ("python",)
+    assert result.removed == ()
+    assert path.read_text() == f"{ATOM} lua python\n"
+
+
+def test_set_is_idempotent(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} lua\n")
+
+    result = ConfigStore().apply_mutation(path, mutation("set", "lua"))
+
+    assert result.changed is False
+    assert result.added == ()
+    assert path.read_text() == f"{ATOM} lua\n"
+
+
+def test_set_replaces_the_contradicting_token(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} -lua python\n")
+
+    result = ConfigStore().apply_mutation(path, mutation("set", "lua"))
+
+    assert result.added == ("lua",)
+    assert result.removed == ("-lua",)
+    assert path.read_text() == f"{ATOM} python lua\n"
+
+
+def test_unset_removes_flag_and_negated_flag(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} -lua python\n")
+
+    ConfigStore().apply_mutation(path, mutation("unset", "lua"))
+
+    assert path.read_text() == f"{ATOM} python\n"
+
+
+def test_unset_last_value_removes_the_line(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"# comment\n{ATOM} lua\nsys-apps/portage build\n")
+
+    ConfigStore().apply_mutation(path, mutation("unset", "lua"))
+
+    assert path.read_text() == "# comment\nsys-apps/portage build\n"
+
+
+def test_unset_on_missing_file_is_a_no_op(tmp_path):
+    path = tmp_path / "package.use" / "ptools"
+
+    result = ConfigStore().apply_mutation(path, mutation("unset", "lua"))
+
+    assert result.changed is False
+    assert not path.exists()
+
+
+def test_preserves_comments_blanks_and_unrelated_entries(tmp_path):
+    content = (
+        "# Top comment\n"
+        "\n"
+        "dev-lang/python  sqlite   -tk\n"
+        "\tsys-apps/portage build\n"
+        "\n"
+        "# trailing note\n"
     )
-    assert file_path.read_text() == expected
+    path = tmp_path / "ptools"
+    path.write_text(content)
+
+    ConfigStore().apply_mutation(path, mutation("set", "lua"))
+
+    assert path.read_text() == content + f"{ATOM} lua\n"
 
 
-def test_config_store_dry_run(tmp_path):
-    file_path = tmp_path / "ptools"
-    file_path.write_text("app-editors/neovim lua\n")
-    store = ConfigStore(dry_run=True)
+def test_preserves_inline_comment_on_the_managed_entry(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} lua  # why we need lua\n")
 
-    mutation = ConfigMutation(operation="set", atom="app-editors/neovim", values=("python",))
-    change = store.apply_mutation(file_path, mutation)
+    ConfigStore().apply_mutation(path, mutation("set", "python"))
 
-    assert change is not None
-    assert "python" in change.after
-    assert file_path.read_text() == "app-editors/neovim lua\n"
+    assert path.read_text() == f"{ATOM} lua python # why we need lua\n"
 
 
-def test_config_store_duplicate_error(tmp_path):
-    file_path = tmp_path / "ptools"
-    file_path.write_text("app-editors/neovim lua\napp-editors/neovim python\n")
+def test_appends_newline_before_adding_to_an_unterminated_file(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text("sys-apps/portage build")
+
+    ConfigStore().apply_mutation(path, mutation("set", "lua"))
+
+    assert path.read_text() == f"sys-apps/portage build\n{ATOM} lua\n"
+
+
+def test_duplicate_atoms_fail_by_default(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} lua\n{ATOM} python\n")
+
+    with pytest.raises(InvalidConfigError, match="duplicate entries"):
+        ConfigStore().apply_mutation(path, mutation("set", "sqlite"))
+
+
+def test_duplicate_atoms_merge_on_request(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} lua\nsys-apps/portage build\n{ATOM} python\n")
+
+    ConfigStore(merge_duplicates=True).apply_mutation(path, mutation("set", "sqlite"))
+
+    assert path.read_text() == f"{ATOM} lua python sqlite\nsys-apps/portage build\n"
+
+
+def test_valueless_managed_entry_is_invalid(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM}\n")
+
+    with pytest.raises(InvalidConfigError, match="has no values"):
+        ConfigStore().apply_mutation(path, mutation("set", "lua"))
+
+
+def test_non_utf8_target_is_invalid(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_bytes(b"\xff\xfe not utf-8\n")
+
+    with pytest.raises(InvalidConfigError, match="not valid UTF-8"):
+        ConfigStore().apply_mutation(path, mutation("set", "lua"))
+
+
+def test_dry_run_writes_nothing(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} lua\n")
+    before = path.read_bytes()
+
+    result = ConfigStore(dry_run=True).apply_mutation(path, mutation("set", "python"))
+
+    assert result.changed is True
+    assert result.added == ("python",)
+    assert path.read_bytes() == before
+
+
+def test_dry_run_does_not_create_the_directory(tmp_path):
+    path = tmp_path / "package.use" / "ptools"
+
+    ConfigStore(dry_run=True).apply_mutation(path, mutation("set", "lua"))
+
+    assert not path.parent.exists()
+
+
+def test_read_values_returns_managed_tokens(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"# c\n{ATOM} lua -python\n")
+
+    store = ConfigStore()
+    assert store.read_values(path, ATOM) == ("lua", "-python")
+    assert store.read_values(path, "sys-apps/portage") == ()
+    assert store.read_values(tmp_path / "missing", ATOM) == ()
+
+
+def test_existing_mode_and_group_are_preserved(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} lua\n")
+    os.chmod(path, 0o640)
+
+    ConfigStore().apply_mutation(path, mutation("set", "python"))
+
+    assert path.stat().st_mode & 0o777 == 0o640
+
+
+def test_world_writable_mode_is_never_carried_over(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} lua\n")
+    os.chmod(path, 0o666)
+
+    ConfigStore().apply_mutation(path, mutation("set", "python"))
+
+    assert path.stat().st_mode & 0o002 == 0
+
+
+def test_refuses_to_write_through_a_symlink(tmp_path):
+    real = tmp_path / "elsewhere"
+    real.write_text(f"{ATOM} lua\n")
+    link = tmp_path / "ptools"
+    link.symlink_to(real)
+
+    with pytest.raises(WriteError, match="symlink"):
+        ConfigStore().apply_mutation(link, mutation("set", "python"))
+
+    assert real.read_text() == f"{ATOM} lua\n"
+
+
+def test_flat_layout_parent_is_reported_as_invalid(tmp_path):
+    flat = tmp_path / "package.use"
+    flat.write_text("# a flat package.use file\n")
+
+    with pytest.raises(InvalidConfigError, match="directory layout"):
+        ConfigStore().apply_mutation(flat / "ptools", mutation("set", "lua"))
+
+
+def test_interrupted_write_leaves_the_target_intact(tmp_path, monkeypatch):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} lua\n")
     store = ConfigStore()
 
-    mutation = ConfigMutation(operation="set", atom="app-editors/neovim", values=("test",))
-    with pytest.raises(InvalidConfigError):
-        store.apply_mutation(file_path, mutation)
+    def boom(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(ConfigStore, "_preserve_metadata", boom)
+
+    with pytest.raises(KeyboardInterrupt):
+        store.apply_mutation(path, mutation("set", "python"))
+
+    assert path.read_text() == f"{ATOM} lua\n"
+    assert list(tmp_path.glob(".ptools-*")) == []
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file permissions")
+def test_unwritable_directory_is_a_permission_error(tmp_path):
+    target_dir = tmp_path / "package.use"
+    target_dir.mkdir()
+    path = target_dir / "ptools"
+    path.write_text(f"{ATOM} lua\n")
+    os.chmod(target_dir, 0o500)
+    try:
+        with pytest.raises(PermissionDeniedError, match="re-run as root"):
+            ConfigStore().apply_mutation(path, mutation("set", "python"))
+    finally:
+        os.chmod(target_dir, 0o700)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file permissions")
+def test_unreadable_target_is_a_permission_error(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM} lua\n")
+    os.chmod(path, 0o000)
+    try:
+        with pytest.raises(PermissionDeniedError, match="cannot read"):
+            ConfigStore().apply_mutation(path, mutation("set", "python"))
+    finally:
+        os.chmod(path, 0o600)
