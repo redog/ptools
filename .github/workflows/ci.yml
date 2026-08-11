@@ -7,11 +7,13 @@ on:
     branches: [ main ]
     paths:
       - '**/*.py'
+      - 'pyproject.toml'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [ main ]
     paths:
       - '**/*.py'
+      - 'pyproject.toml'
       - '.github/workflows/ci.yml'
   workflow_dispatch:
 
@@ -43,6 +45,20 @@ jobs:
           python -c "import portage; print('portage', portage.VERSION)"
 # <<< gumbo-dev:deps
 
-      - name: Syntax check (py_compile)
+      - name: Install ptools + test deps
         if: matrix.platform == 'linux'
-        run: python -m py_compile pkw.py ptk.py puse.py
+        run: |
+          # --system-site-packages so the venv can see the system `portage`
+          # module (needed by portage_adapter / integration tests). Unit tests
+          # use the mock backend and don't require it.
+          python -m venv --system-site-packages .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -e . pytest pytest-cov
+
+      - name: Run test suite
+        if: matrix.platform == 'linux'
+        run: |
+          . .venv/bin/activate
+          # pyproject bakes in --cov=ptools --cov-fail-under=85
+          pytest
