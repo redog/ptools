@@ -1,135 +1,130 @@
-# ptools — manual build & test cheat sheet
+# Building, testing & packaging ptools on Gentoo
 
-How to check, run, and package ptools by hand, without waiting on the gumbo CI
-runner. Ultimate target: an **ebuild** that installs `puse`, `pkw`, and the
-`ptk` library onto a real Gentoo system.
-
----
-
-## 0. Reality check (read this first)
-
-- ptools is **Python 2** source, mid-port to **Python 3** (see `SPEC.md`).
-  The scripts use `print` statements, `has_key`, `raw_input`, `except X, e:`
-  and import **`portage_util`** / **`output`** — the old top-level portage
-  module names. Modern portage exposes these as **`portage.util`** and
-  **`portage.output`**.
-- Consequence: on a current Gentoo (`python` == python3), the code **won't
-  compile or import as-is**. `py_compile` will throw `SyntaxError`. That's
-  expected and is itself the to-do list for the port — not a broken setup.
-- These tools **write to `/etc/portage`** (hardcoded in `ptk.py`:
-  `user_config_path = "/etc/portage"`). They do **not** honor
-  `PORTAGE_CONFIGROOT` for writes. So **never smoke-test the write paths on a
-  box whose `/etc/portage` you care about.** Use the disposable `gentoo-dev`
-  container (below) — same environment CI uses, and nothing to lose.
+A straight guide for anyone on a Gentoo box who wants to check, run, and
+install ptools by hand. No CI, no containers, no special host — just Gentoo,
+portage, and git. The end goal is an **ebuild** that installs `puse`, `pkw`,
+and the `ptk` library.
 
 ---
 
-## 1. Where to run it
+## 0. Read this first
 
-The code imports `portage`, so it only works on a machine with portage's
-Python modules — i.e. Gentoo. Two options:
+- ptools is **Python 2** source, mid-port to **Python 3** (see `SPEC.md`). It
+  uses `print` statements, `has_key`, `raw_input`, `except X, e:` and imports
+  the old **`portage_util`** / **`output`** module names, which modern portage
+  now exposes as **`portage.util`** / **`portage.output`**.
+- So on a current Gentoo (`python` is python3) the code **won't compile or
+  import unchanged** — `py_compile` throws `SyntaxError`. That's expected; the
+  failures are the porting to-do list, not a broken setup.
+- **The tools write to your real `/etc/portage`.** `ptk.py` hardcodes
+  `user_config_path = "/etc/portage"` and ignores `PORTAGE_CONFIGROOT`, so the
+  write commands (`--change`, `--remove`) edit `package.use` /
+  `package.keywords` on the machine you run them on. Read commands (`--show`,
+  `--help`) are safe. See §3 for how to test writes without regret.
 
-**A. The disposable `gentoo-dev` container (recommended).** Same image the CI
-runner uses; clobbering its `/etc/portage` is harmless.
+---
+
+## 1. Prerequisites
+
+You already have what matters on any Gentoo install: portage (provides the
+`portage` python module) and a system python. Add git, and optionally linters:
 
 ```bash
-# on gumbo, with the devenv up (start-env.sh)
-podman exec -it -u eric gentoo-dev bash --login
-# then, inside:
-git clone https://github.com/redog/ptools && cd ptools
+sudo emerge -n dev-vcs/git
+# optional, nice to have for the port work:
+sudo emerge -n dev-python/pyflakes   # or: pipx install ruff
 ```
 
-Or one-shot without the full tmux env:
+Grab the source:
 
 ```bash
-podman run --rm -it -v "$PWD:/src:z" -w /src localhost/devenv-gentoo bash
+git clone https://github.com/redog/ptools
+cd ptools
 ```
-
-**B. A real Gentoo box** — fine for read-only checks and ebuild work; just
-respect the `/etc/portage` write warning above.
 
 ---
 
-## 2. Static checks (run these now — they map the port work)
+## 2. Static checks ("does it build?")
 
-No build step; it's Python. "Does it parse?" is the first gate.
+There's no compile step — it's Python — so the first gate is "does it parse?"
 
 ```bash
 # syntax check under the system python (python3): expect py2 SyntaxErrors today
 python -m py_compile ptk.py puse.py pkw.py
 
-# same thing, more readable failure, one file at a time
-for f in ptk.py puse.py pkw.py; do echo "== $f =="; python -c "import ast,sys; ast.parse(open('$f').read())" || true; done
+# clearer, one file at a time
+for f in ptk.py puse.py pkw.py; do
+  echo "== $f =="
+  python -c "import ast; ast.parse(open('$f').read())" || true
+done
 
-# if you have them, richer linters (pipx install ruff / pyflakes)
+# richer linters, if installed
 ruff check .
 pyflakes *.py
 ```
 
-What you'll see today: `print ...` statements, `except IOError, e:` etc. —
-each is a concrete py3 fix. Green `py_compile` == the port's syntax layer is
-done. (Note: the CI workflow in `.github/workflows/ci.yml` runs exactly this
-`py_compile` step, so it stays red until the port lands — by design.)
-
-Import-level check (only meaningful **after** syntax is py3-clean):
+Once `py_compile` is clean, the imports are the next layer (only meaningful
+after the syntax is py3-clean):
 
 ```bash
-# will surface the portage_util/output -> portage.util/portage.output renames
-python -c "import ptk"
+python -c "import ptk"   # surfaces portage_util/output -> portage.util/portage.output
 ```
 
 ---
 
-## 3. Smoke-testing the CLIs (post-port, in the container)
+## 3. Running & testing the tools
 
-`ptk.py` is the shared library; `puse` and `pkw` are the front-ends. Once the
-code runs, exercise the **read-only** paths first — `--show` and `--help` don't
-touch `/etc/portage`:
+`ptk.py` is the shared library; `puse` and `pkw` are the front-ends. Test the
+**read-only** paths first — they don't touch `/etc/portage`:
 
 ```bash
 python puse.py --help
-python puse.py --show app-editors/vim      # read-only: prints USE state
+python puse.py --show app-editors/vim     # prints effective USE state
 python pkw.py  --help
+python ptk.py                             # runs test_world(): a world-consistency report
 ```
 
-Write paths (**mutate `/etc/portage/package.use` — container only**):
+### Testing the write paths without wrecking /etc/portage
+
+The mutating commands edit real files. Pick one of these before running them:
+
+**a) Back up and restore (simplest):**
 
 ```bash
+sudo cp -a /etc/portage/package.use /etc/portage/package.use.bak 2>/dev/null || true
+
 python puse.py --change --any app-editors/vim -minimal   # add a flag
-python puse.py --remove --any app-editors/vim minimal    # remove it
-cat /etc/portage/package.use                             # inspect the result
+cat /etc/portage/package.use                             # inspect
+python puse.py --remove --any app-editors/vim minimal    # undo
+
+# restore if anything looks off:
+sudo mv /etc/portage/package.use.bak /etc/portage/package.use
 ```
 
-`ptk.py` run directly executes `test_world()` (a world-consistency report):
+**b) Version /etc under git** (many Gentoo admins already do this) — run the
+tool, `git diff /etc/portage`, and `git checkout` to revert.
 
-```bash
-python ptk.py
-```
-
-Tip: snapshot config before a write test so you can diff/restore:
-
-```bash
-cp -a /etc/portage/package.use{,.bak} 2>/dev/null || true
-```
+**c) Full isolation without a container** — run inside a stage3 chroot you
+control, so a bad write only hits the chroot's `/etc/portage`. More setup, but
+total safety if you're testing destructive paths repeatedly.
 
 ---
 
-## 4. Packaging → the ebuild
+## 4. Packaging into an ebuild
 
-End goal: `emerge app-portage/ptools` installs:
+Target install layout:
 
-| File     | Destination           | Role            |
-|----------|-----------------------|-----------------|
-| `ptk.py` | `/usr/lib/ptools/`    | shared library  |
-| `puse.py`| `/usr/bin/puse`       | USE-flag CLI    |
-| `pkw.py` | `/usr/bin/pkw`        | keyword CLI     |
+| File     | Destination        | Role           |
+|----------|--------------------|----------------|
+| `ptk.py` | `/usr/lib/ptools/` | shared library |
+| `puse.py`| `/usr/bin/puse`    | USE-flag CLI   |
+| `pkw.py` | `/usr/bin/pkw`     | keyword CLI    |
 
-(The front-ends already prepend `/usr/lib/ptools` to `sys.path`, so this layout
-matches the source. Post-port, the cleaner move is to install `ptk` as a real
-importable module into site-packages and drop the `sys.path` hack — noted for
-later.)
+The front-ends already prepend `/usr/lib/ptools` to `sys.path`, so this matches
+the source. (Post-port, the cleaner path is to ship `ptk` as a real importable
+module in site-packages and drop the `sys.path` hack.)
 
-### 4a. Local overlay (one-time setup, inside the container)
+### 4a. Make a local overlay (one time)
 
 ```bash
 sudo mkdir -p /var/db/repos/localrepo/{metadata,profiles}
@@ -142,10 +137,10 @@ location = /var/db/repos/localrepo
 EOF
 ```
 
-### 4b. A live (`-9999`) ebuild for dev iteration
+### 4b. A live (`-9999`) ebuild for iteration
 
-No release tarball or Manifest needed — pulls straight from git, always HEAD.
-Save as `/var/db/repos/localrepo/app-portage/ptools/ptools-9999.ebuild`:
+Pulls straight from git — no release tarball or Manifest needed. Save as
+`/var/db/repos/localrepo/app-portage/ptools/ptools-9999.ebuild`:
 
 ```bash
 # Copyright 1999-2026 Gentoo Authors
@@ -166,7 +161,7 @@ KEYWORDS=""   # live ebuild: no keywords, must be unmasked to install
 
 REQUIRED_USE="${PYTHON_REQUIRED_USE}"
 
-# The scripts import the portage python API, so our interpreter must match the
+# The scripts import portage's python API, so our interpreter must match the
 # one portage itself is built for.
 RDEPEND="
 	${PYTHON_DEPS}
@@ -183,39 +178,36 @@ src_install() {
 }
 ```
 
-### 4c. Build / test the ebuild
+### 4c. Build, install, verify
 
 ```bash
 cd /var/db/repos/localrepo/app-portage/ptools
 
-# step through phases without a full merge (fast feedback on src_install):
+# step through phases for fast feedback on src_install (no system change yet):
 sudo ebuild ptools-9999.ebuild clean unpack compile install
+# inspect the staged tree under the printed ${ED}/ (usr/bin, usr/lib/ptools)
 
-# inspect the staged install tree before it lands:
-#   look under the printed ${ED}/ path for usr/bin/{puse,pkw}, usr/lib/ptools/
-
-# full install to the system (needs the -9999 unmasked):
+# unmask the live ebuild, then merge it for real:
 echo '=app-portage/ptools-9999 **' | sudo tee /etc/portage/package.accept_keywords/ptools
 sudo emerge -av app-portage/ptools
 
-# then verify it's really installed and runnable:
+# verify:
 puse --help
-qlist ptools     # or: equery files app-portage/ptools
+equery files app-portage/ptools     # or: qlist ptools
 sudo emerge -C app-portage/ptools   # clean uninstall when done
 ```
 
-### 4d. Tagged-release ebuild (once a version is cut)
+### 4d. Tagged-release ebuild (once you cut a version)
 
-When you tag e.g. `v0.0.3` on GitHub, the release form drops `git-r3` and uses a
-distfile instead:
+When you tag e.g. `v0.0.3`, drop `git-r3` for a distfile:
 
 ```bash
 SRC_URI="https://github.com/redog/ptools/archive/refs/tags/v${PV}.tar.gz -> ${P}.tar.gz"
 KEYWORDS="~amd64"
-# S="${WORKDIR}/${PN}-${PV}"   # github tarballs unpack to <repo>-<version>/
+S="${WORKDIR}/${PN}-${PV}"   # github tarballs unpack to <repo>-<version>/
 ```
 
-then `sudo ebuild ptools-0.0.3.ebuild manifest` to generate the Manifest, and
+then `sudo ebuild ptools-0.0.3.ebuild manifest` to generate the Manifest and
 `emerge` as above.
 
 ---
@@ -223,24 +215,22 @@ then `sudo ebuild ptools-0.0.3.ebuild manifest` to generate the Manifest, and
 ## 5. One-liners
 
 ```bash
-# quick "does the whole tree parse under py3?" gate (mirrors CI)
+# quick "does the whole tree parse under py3?" gate
 python -m py_compile ptk.py puse.py pkw.py && echo OK
 
-# find every py2-ism to fix (rough but useful)
+# list the py2-isms to fix
 grep -nE '\bprint [^(]|\.has_key\(|raw_input\(|except [A-Za-z].*, [a-z]+:|raise [A-Za-z]+,' *.py
 
-# confirm the portage import names that need renaming
+# the portage import names that need renaming
 grep -nE 'portage_util|from output import' *.py
 ```
 
----
-
 ## 6. Suggested order of attack
 
-1. Make `py_compile` pass (py2 → py3 syntax). CI goes green here.
+1. Make `py_compile` pass (py2 → py3 syntax).
 2. Fix imports: `portage_util` → `portage.util`, `output` → `portage.output`;
-   audit the `portage import ...` names against the current API.
-3. Get `python puse.py --show <pkg>` working read-only in the container.
-4. Validate the write paths against a throwaway `/etc/portage`.
-5. Land the `-9999` ebuild; iterate with `ebuild ... install`.
+   audit the `from portage import ...` names against the current API.
+3. Get `puse --show <pkg>` working read-only.
+4. Validate the write paths (back up `/etc/portage` first, per §3).
+5. Install via the `-9999` ebuild; iterate with `ebuild … install`.
 6. Tag a release and add the versioned ebuild.
