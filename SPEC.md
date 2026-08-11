@@ -1,5 +1,10 @@
 # Portage Tools Modernization Specification
 
+> **Building ptools?** Start with [`build_PROMPT.md`](build_PROMPT.md) — it holds
+> the current state, resolved decisions, and remaining milestones. This SPEC is
+> the behavioral reference behind it.
+
+
 ```yaml
 PROJECT_NAME: ptools
 PROJECT_TYPE: Gentoo Portage administration CLI
