@@ -60,11 +60,13 @@ class RealPortageBackend:
         if not repo_matches and not installed_matches:
             raise PackageNotFoundError(f"package not found: {request}")
 
+        # Always take the cpv from the match: portage sorts matches by version,
+        # and Atom.cpv is the *cp* for an unversioned atom, not a real cpv.
         best = repo_matches[-1] if repo_matches else installed_matches[-1]
         return ResolvedPackage(
             atom=str(atom),
             cp=str(atom.cp),
-            cpv=str(atom.cpv) if atom.cpv else best,
+            cpv=str(best),
             installed_versions=tuple(installed_matches),
             repository_versions=tuple(repo_matches),
         )
@@ -72,8 +74,10 @@ class RealPortageBackend:
     def _aux(self, db: Any, cpv: str, key: str) -> tuple[str, ...]:
         try:
             return tuple(db.aux_get(cpv, [key])[0].split())
-        except (KeyError, PortageException):
+        except KeyError:
             return ()
+        except PortageException as exc:
+            raise PortageIntegrationError(f"cannot read {key} for {cpv}: {exc}") from exc
 
     def effective_use(self, atom: str) -> tuple[str, ...]:
         resolved = self.resolve(atom)

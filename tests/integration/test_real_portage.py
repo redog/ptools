@@ -52,8 +52,12 @@ def test_atom_import_and_supported_db_match(backend, all_cp):
 def test_category_qualified_atom(backend):
     package = backend.resolve(ANCHOR)
 
+    # Regression: portage's Atom.cpv is the *cp* for an unversioned atom, so a
+    # resolved cpv must always carry a version and be usable for metadata reads.
     assert package.cpv.startswith(f"{ANCHOR}-")
+    assert package.cpv != package.cp
     assert backend.keywords(ANCHOR)
+    assert backend.iuse(ANCHOR)
 
 
 def test_exact_atom(backend):
@@ -73,12 +77,17 @@ def test_invalid_atom_is_not_found(backend):
         backend.resolve("this is not an atom")
 
 
-def test_ambiguous_unqualified_name(backend, all_cp):
-    seen: dict[str, int] = {}
+@pytest.fixture(scope="module")
+def name_counts(all_cp):
+    counts: dict[str, int] = {}
     for cp in all_cp:
         name = cp.split("/")[-1]
-        seen[name] = seen.get(name, 0) + 1
-    ambiguous = next((name for name, count in seen.items() if count > 1), None)
+        counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def test_ambiguous_unqualified_name(backend, name_counts):
+    ambiguous = next((name for name, count in name_counts.items() if count > 1), None)
     if ambiguous is None:
         pytest.skip("no package name exists in two categories in this repository")
 
@@ -86,8 +95,14 @@ def test_ambiguous_unqualified_name(backend, all_cp):
         backend.resolve(ambiguous)
 
 
-def test_unqualified_name_resolves_when_unique(backend, all_cp):
-    assert backend.resolve("portage").cp == ANCHOR
+def test_unqualified_name_resolves_when_unique(backend, all_cp, name_counts):
+    # "portage" itself is ambiguous (acct-group, acct-user, sys-apps), so pick a
+    # name the repository really does carry in exactly one category.
+    unique = next((cp for cp in all_cp if name_counts[cp.split("/")[-1]] == 1), None)
+    if unique is None:
+        pytest.skip("every package name is ambiguous in this repository")
+
+    assert backend.resolve(unique.split("/")[-1]).cp == unique
 
 
 def test_use_state_reads(backend, sandbox):
