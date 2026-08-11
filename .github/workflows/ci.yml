@@ -62,3 +62,18 @@ jobs:
           . .venv/bin/activate
           # pyproject bakes in --cov=ptools --cov-fail-under=85
           pytest
+
+      - name: Discover real environment
+        if: matrix.os == 'gentoo-dev'
+        run: |
+          . .venv/bin/activate
+          # Milestone D: the output of this step is what docs/environment.md
+          # records. It only reads portage settings; it writes nothing.
+          python scripts/discover_environment.py | tee environment.md
+
+      - name: Upload environment discovery
+        if: matrix.os == 'gentoo-dev'
+        uses: actions/upload-artifact@v4
+        with:
+          name: environment-${{ matrix.os }}
+          path: environment.md

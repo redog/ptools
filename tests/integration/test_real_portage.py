@@ -1,0 +1,141 @@
+"""Integration tests against a real portage installation.
+
+These run on the gumbo runner (and any Gentoo host); everywhere else they skip.
+Run them with ``pytest -m integration``.
+"""
+
+import pytest
+
+from ptools import pkw, puse
+from ptools.config_store import ConfigStore
+from ptools.errors import AmbiguousPackageError, PackageNotFoundError
+from ptools.portage_adapter import get_portage_backend
+from ptools.services import MutationService, ReadOnlyService
+
+pytestmark = pytest.mark.integration
+
+portage = pytest.importorskip("portage", reason="needs a real portage installation")
+
+#: Always present on a Gentoo host, in both the tree and the vdb.
+ANCHOR = "sys-apps/portage"
+
+
+@pytest.fixture(scope="module")
+def backend():
+    return get_portage_backend()
+
+
+@pytest.fixture(scope="module")
+def all_cp(backend):
+    cps = sorted(set(backend.portdb.cp_all()))
+    if not cps:
+        pytest.skip("no ebuild repository available on this host")
+    return cps
+
+
+@pytest.fixture
+def sandbox(tmp_path, monkeypatch):
+    root = tmp_path / "portage"
+    root.mkdir()
+    monkeypatch.setenv("PTOOLS_CONFIG_ROOT", str(root))
+    return root
+
+
+def test_atom_import_and_supported_db_match(backend, all_cp):
+    package = backend.resolve(ANCHOR)
+
+    assert package.cp == ANCHOR
+    assert package.repository_versions or package.installed_versions
+    assert ANCHOR in all_cp
+
+
+def test_category_qualified_atom(backend):
+    package = backend.resolve(ANCHOR)
+
+    assert package.cpv.startswith(f"{ANCHOR}-")
+    assert backend.keywords(ANCHOR)
+
+
+def test_exact_atom(backend):
+    package = backend.resolve(ANCHOR)
+
+    exact = backend.resolve(f"={package.cpv}")
+
+    assert exact.cpv == package.cpv
+    assert exact.cp == ANCHOR
+
+
+def test_invalid_atom_is_not_found(backend):
+    with pytest.raises(PackageNotFoundError):
+        backend.resolve("app-nonexistent/definitely-not-a-package")
+
+    with pytest.raises(PackageNotFoundError):
+        backend.resolve("this is not an atom")
+
+
+def test_ambiguous_unqualified_name(backend, all_cp):
+    seen: dict[str, int] = {}
+    for cp in all_cp:
+        name = cp.split("/")[-1]
+        seen[name] = seen.get(name, 0) + 1
+    ambiguous = next((name for name, count in seen.items() if count > 1), None)
+    if ambiguous is None:
+        pytest.skip("no package name exists in two categories in this repository")
+
+    with pytest.raises(AmbiguousPackageError):
+        backend.resolve(ambiguous)
+
+
+def test_unqualified_name_resolves_when_unique(backend, all_cp):
+    assert backend.resolve("portage").cp == ANCHOR
+
+
+def test_use_state_reads(backend, sandbox):
+    payload = ReadOnlyService(backend, ConfigStore(), sandbox).use_show(ANCHOR)
+
+    assert payload["cp"] == ANCHOR
+    assert payload["effective"]
+    assert payload["managed"] == []
+
+
+def test_keyword_state_reads(backend, sandbox):
+    payload = ReadOnlyService(backend, ConfigStore(), sandbox).keyword_show(ANCHOR)
+
+    assert payload["arch"]
+    assert payload["keywords"]
+
+
+def test_sandbox_write_preserves_the_rest_of_the_file(backend, sandbox):
+    target = sandbox / "package.use" / "ptools"
+    target.parent.mkdir(parents=True)
+    preamble = "# hand written\n\ndev-lang/python sqlite\n"
+    target.write_text(preamble)
+
+    service = MutationService(backend, ConfigStore(), sandbox)
+    result = service.apply_use("set", ANCHOR, ("build",))
+
+    assert result["changed"] is True
+    assert target.read_text() == preamble + f"{ANCHOR} build\n"
+
+
+def test_cli_round_trip_in_a_sandbox(sandbox):
+    target = sandbox / "package.use" / "ptools"
+
+    assert puse.main([ANCHOR, "build"]) == 0
+    assert target.read_text() == f"{ANCHOR} build\n"
+    assert puse.main([ANCHOR, "build"]) == 0  # idempotent
+    assert puse.main(["--unset", ANCHOR, "build"]) == 0
+    assert target.read_text() == ""
+
+
+def test_pkw_testing_uses_the_host_arch(backend, sandbox):
+    arch = backend.get_setting("ARCH")
+    target = sandbox / "package.accept_keywords" / "ptools"
+
+    assert pkw.main(["--testing", ANCHOR]) == 0
+    assert target.read_text() == f"{ANCHOR} ~{arch}\n"
+
+
+def test_dry_run_never_writes(sandbox):
+    assert puse.main(["--dry-run", ANCHOR, "build"]) == 0
+    assert not (sandbox / "package.use" / "ptools").exists()
