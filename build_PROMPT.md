@@ -104,8 +104,12 @@ Still open:
                     from the queue: `gh api repos/redog/ptools/actions/runners`
                     returns total_count 0, so no runner has ever registered -
                     bring-up still pending, NOT a registered runner gone offline
-                    (7 runs queued as of 2026-08-12T00:40Z; re-confirmed
+                    (8 runs queued as of 2026-08-12T01:20Z; re-confirmed
                     total_count 0 on BOTH redog/ptools and redog/dev-env).
+                    The newest queued run, 627766e, covers exactly the code at
+                    HEAD - the two commits after it are docs-only - so a runner
+                    registering before ~2026-08-13T00:59Z would drain valid
+                    evidence for the current tree. Still do not wait on it.
 
                     CORRECTION (2026-08-12, read against the dev-env tree): the
                     bring-up command previously recorded here was insufficient.

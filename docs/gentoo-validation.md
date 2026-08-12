@@ -275,24 +275,33 @@ repository and the skip-guard should pass once a runner registers.
 
 ## Do not count on the queued runs to drain
 
-The queued ptools runs — 7 as measured at `2026-08-12T00:40Z` — are not a
+The queued ptools runs — **8** as measured at `2026-08-12T01:20Z` — are not a
 reliable way to collect the evidence once gumbo comes back. Two reasons:
 
 - GitHub terminates a job that has waited too long for a self-hosted runner to
-  pick it up (~24h). The backlog is only ~3h old at that measurement, and the
-  seven runs fall out of the queue across one window: the oldest (`428aa4b`,
+  pick it up (~24h). The backlog is only ~3h30m old at that measurement, and the
+  eight runs fall out of the queue across one window: the oldest (`428aa4b`,
   waiting since `2026-08-11T21:42Z`) around `2026-08-12T21:42Z`, the newest
-  (`bafbc64`, since `2026-08-12T00:33Z`) around `2026-08-13T00:33Z`. So if a
+  (`627766e`, since `2026-08-12T00:59Z`) around `2026-08-13T00:59Z`. So if a
   runner registers *before* that window the queued runs would in fact drain by
-  themselves — but only the newest is at the current tip, the other six would
-  build superseded commits, and after the window nothing is left to drain at
-  all. Do not plan around them either way.
+  themselves, and after it nothing is left to drain at all.
 - `ci.yml`'s push trigger is path-filtered to `**/*.py`, `pyproject.toml`, and
   `.github/workflows/ci.yml`. Docs-only commits do **not** arm a new run, so
   pushing another note like this one will not re-queue the leg. (Two commits
   since `22a165f` did arm one, because they were not docs-only despite their
   subjects: `705a691` changed `portage_real.py`, and `bafbc64` touched
   `ci.yml` alongside its doc edit.)
+
+One refinement, because it changes what a drained backlog would be worth: the
+newest queued run is no longer merely "closest to the tip", it covers **exactly
+the code at `HEAD`**. `627766e` is the last commit that touched code; the two
+commits after it (`3126461`, `d747e71`) are docs-only — which is also why they
+armed no run of their own. So if a runner registers inside the window above,
+run `627766e` alone is sufficient evidence for the current tree, and the other
+seven are superseded. That is a reason not to *panic* about the backlog
+expiring, not a reason to wait on it: an explicit
+`gh workflow run ci.yml -R redog/ptools --ref main` is still the way to collect
+the evidence, and it is the only way once the window closes.
 
 So after runner bring-up, trigger the leg explicitly rather than waiting:
 
