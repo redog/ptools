@@ -198,7 +198,22 @@ Minimum Python: 3.11 (from pyproject; supersedes the old "unresolved" placeholde
 Target ARCH / Portage version: read from the real system (Milestone D); never assume amd64.
 Backup Policy / Layout / Wrappers: confirmed above — no longer open.
 
-OPEN: (none currently — ask before introducing a new decision)
+OPEN: bare atom in the managed package.accept_keywords file (found 2026-08-12).
+  A line that is just an atom, with no tokens, is a LEGITIMATE portage entry in
+  package.accept_keywords - it means "accept ~ARCH for this package". ptools
+  never writes one (an emptied entry is deleted, a new entry always has values),
+  so this only arises from a hand-edited or externally-written file. Today
+  ConfigStore._select/apply_mutation rejects it as an invalid selected entry:
+    InvalidConfigError "entry for cat/pkg ... line 1 has no values" -> exit 6
+  (config_store.py:122-125, locked in by tests/unit/test_config_store.py:169).
+  Verified at the store level; the target file is left byte-identical.
+  For package.use a valueless entry really is meaningless, so the current
+  behavior is right there - the question is only about the keywords file.
+  Options: (a) keep refusing, but say why - that the bare atom already means
+  ~ARCH and how to proceed; (b) treat it as an implicit ~ARCH value and merge
+  the requested keyword into it; (c) leave exactly as is.
+  NOT changed unilaterally: this is the safety-critical store, refusing is the
+  side that cannot mangle a config, and §1 says a new decision stops the loop.
 ```
 
 ---
