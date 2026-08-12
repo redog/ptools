@@ -86,6 +86,12 @@ pip install -e .        # editable
 pip install dist/ptools-0.1.0-py3-none-any.whl
 ```
 
+Verified at `3126461` by installing the wheel into a clean venv on a non-Gentoo
+host: `bin/` gains exactly `puse` and `pkw` and no `ptools` script, both
+`--help` exit 0, a bare `puse` exits 2, and — with no portage to import — a show
+exits 7 with the message on stderr and stdout empty (`--json` puts the error
+object on stderr too). `twine check` passes on both artifacts.
+
 ---
 
 ## 3. Test
