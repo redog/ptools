@@ -175,6 +175,17 @@ The missing step is `run-runners.sh`. Full sequence for a human on gumbo:
 OS whose image is not built yet, so step 3 must precede it. Changing
 `start-env.sh` to call it is a dev-env decision, in a file dev-env's README
 flags as security-sensitive; it is out of scope for ptools and is not done here.
+
+One refinement on that decision, from `run-runners.sh`'s own header: it "takes
+NO input from the network" — all intent comes from the git-tracked, regex-
+validated `containers.list`/`projects.list`. So `start-env.sh` calling it with
+no network-derived arguments would *not* widen the `authorized_keys`
+`command=` gate; the pinned command stays
+`start-env.sh --rebuild --persist` and `$SSH_ORIGINAL_COMMAND` is still only
+honoured when it is exactly `update`. The countervailing point is that the same
+header says the split exists "so start-env.sh does not have to ... Keep it that
+way", i.e. the separation looks deliberate rather than unfinished, which is why
+this stays an OPEN question for the user rather than an obvious fix.
 The gentoo image runs `emerge-webrsync` at build time
 (`Containerfile.gentoo`), so the integration suite will have a real ebuild
 repository and the skip-guard should pass once a runner registers.
