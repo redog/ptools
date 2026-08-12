@@ -133,8 +133,48 @@ assertion that a resolved cpv carries a version.
 - A second architecture; only amd64 was exercised.
 - The gumbo runner leg, which is still queued (the repo has zero registered
   runners, so the queued jobs cannot start; bring-up is a human step on the
-  gumbo host itself). The workflow now fails that leg loudly if the integration
-  suite skips: it asserts `portage` imports inside the venv, and re-runs
-  `pytest -m integration --junitxml` rejecting any run with zero tests or any
-  skip. Without those guards a runner missing the portage module would have
-  reported green while validating nothing.
+  gumbo host itself — see "Why the gumbo leg cannot start" below). The workflow
+  now fails that leg loudly if the integration suite skips: it asserts `portage`
+  imports inside the venv, and re-runs `pytest -m integration --junitxml`
+  rejecting any run with zero tests or any skip. Without those guards a runner
+  missing the portage module would have reported green while validating nothing.
+
+## Why the gumbo leg cannot start
+
+Read against the dev-env tree on 2026-08-12. Both config files really are
+correct: `containers.list` has `gentoo-dev:Containerfile.gentoo:devenv-gentoo`
+uncommented, and `projects.list` has `redog/ptools : gentoo-dev`. The blocker is
+*not* only that a human has to run bring-up — the previously documented bring-up
+command would not have produced a matching runner:
+
+- `run-runners.sh` is the only script that reads `projects.list` and registers a
+  runner with `--labels self-hosted,gumbo,<os>` (`run-runners.sh:145`), which is
+  what this repo's `runs-on: [self-hosted, gumbo, gentoo-dev]` needs.
+- `start-env.sh` **never calls `run-runners.sh`** (no reference to it in that
+  file). dev-env's README lists it as "Called by `start-env.sh`", but the README
+  also carries an "Integrating `run-runners.sh` into `start-env.sh`" section
+  describing that swap as still to be done. The README's own claim is stale.
+- `start-env.sh` only starts a runner at all with `--include-runner`
+  (`start-env.sh:100-102`), and that one is the generic `devenv-runner` image
+  whose entrypoint hardcodes `--labels "gumbo,podman"`
+  (`runner-entrypoint.sh:48`). Those labels never match `gentoo-dev`, and that
+  image has no `portage` either.
+
+So `./start-env.sh --rebuild --persist` alone leaves ptools' jobs queued forever.
+The missing step is `run-runners.sh`. Full sequence for a human on gumbo:
+
+```bash
+./update-configs.sh                     # sync git-tracked config to ~/.config/dev-env
+./start-env.sh --build-gentoo           # once; populates gentoo-pkgs/ binpkgs
+./start-env.sh --rebuild --persist      # builds the devenv-gentoo image
+./run-runners.sh --dry-run              # preview; then, if it looks right:
+./run-runners.sh --only redog/ptools    # starts gentoo-dev + registers the runner
+```
+
+`run-runners.sh` needs `GITHUB_TOKEN` in `~/.config/dev-env/.env` and skips any
+OS whose image is not built yet, so step 3 must precede it. Changing
+`start-env.sh` to call it is a dev-env decision, in a file dev-env's README
+flags as security-sensitive; it is out of scope for ptools and is not done here.
+The gentoo image runs `emerge-webrsync` at build time
+(`Containerfile.gentoo`), so the integration suite will have a real ebuild
+repository and the skip-guard should pass once a runner registers.

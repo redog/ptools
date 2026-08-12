@@ -98,14 +98,30 @@ Still open:
                     `redog/ptools : gentoo-dev`. What is missing is bring-up ON
                     the gumbo host, which by design has no inbound path from
                     liminal (see dev-env README "Security boundary" - do NOT try
-                    to widen the SSH gate). A human on gumbo runs:
+                    to widen the SSH gate). Confirmed by API, not just inferred
+                    from the queue: `gh api repos/redog/ptools/actions/runners`
+                    returns total_count 0, so no runner has ever registered -
+                    bring-up still pending, NOT a registered runner gone offline
+                    (5 runs queued as of 2026-08-12).
+
+                    CORRECTION (2026-08-12, read against the dev-env tree): the
+                    bring-up command previously recorded here was insufficient.
+                    `start-env.sh --rebuild --persist` does NOT register a
+                    gentoo-dev runner - only `run-runners.sh` applies the labels
+                    `self-hosted,gumbo,<os>` that this repo's ci.yml matches
+                    (run-runners.sh:145), and start-env.sh never calls it. Its
+                    own optional `--include-runner` container is the generic
+                    devenv-runner image with hardcoded labels "gumbo,podman"
+                    (runner-entrypoint.sh:48) and no portage. Correct sequence,
+                    and the run-runners.sh step is the one that was missing:
+                      ./update-configs.sh
                       ./start-env.sh --build-gentoo     # once, populates gentoo-pkgs/
-                      ./update-configs.sh && ./start-env.sh --rebuild --persist
-                    Until then every ptools CI run queues forever (4 queued as of
-                    2026-08-11). Confirmed by API, not just inferred from the
-                    queue: `gh api repos/redog/ptools/actions/runners` returns
-                    total_count 0, so no runner has ever registered - this is
-                    bring-up still pending, NOT a registered runner gone offline.
+                      ./start-env.sh --rebuild --persist   # builds devenv-gentoo
+                      ./run-runners.sh --only redog/ptools # registers the runner
+                    Details and evidence: docs/gentoo-validation.md
+                    "Why the gumbo leg cannot start". Teaching start-env.sh to
+                    call run-runners.sh is a dev-env change in a security-
+                    sensitive file - OPEN, ask the user; do not do it silently.
   Milestone F     : everything except the gumbo leg is DONE and green -
                     ruff check, ruff format --check, mypy strict, pytest
                     (156 passed, 97.15% vs the 85% gate), python -m build
