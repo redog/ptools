@@ -157,7 +157,7 @@ Still open:
                     to drain".
   Milestone F     : everything except the gumbo leg is DONE and green -
                     ruff check, ruff format --check, mypy strict, pytest
-                    (156 passed, 97.15% vs the 85% gate), python -m build
+                    (158 passed, 97.39% vs the 85% gate), python -m build
                     (sdist + wheel), python -m twine check (both PASSED), and
                     the documentation/migration work above. The single
                     outstanding criterion is the integration suite passing on

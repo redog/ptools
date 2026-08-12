@@ -65,17 +65,51 @@ def test_package_without_versions_resolves_to_no_cpv():
     assert MockPortageBackend({"cat/pkg": {}}).resolve("cat/pkg").cpv is None
 
 
-def test_factory_reports_a_missing_portage_module(monkeypatch):
+def _raise_on_importing_portage_real(monkeypatch, exc):
     import builtins
 
     real_import = builtins.__import__
 
     def fake_import(name, *args, **kwargs):
         if name == "ptools.portage_real":
-            raise ImportError("No module named 'portage'")
+            raise exc
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
+
+def test_factory_reports_a_missing_portage_module(monkeypatch):
+    _raise_on_importing_portage_real(monkeypatch, ImportError("No module named 'portage'"))
+
     with pytest.raises(PortageIntegrationError, match="portage Python API not available"):
+        get_portage_backend()
+
+
+def test_factory_maps_a_broken_portage_configuration_to_exit_7(monkeypatch):
+    # Importing portage reads make.conf and the profile, so a broken one raises
+    # a portage exception out of the import - not an ImportError.
+    class ParseError(Exception):
+        pass
+
+    _raise_on_importing_portage_real(monkeypatch, ParseError("make.conf: line 3: invalid"))
+
+    with pytest.raises(PortageIntegrationError, match="configuration failed to load") as caught:
+        get_portage_backend()
+    assert caught.value.exit_code == 7
+
+
+def test_factory_maps_a_failing_backend_construction_to_exit_7(monkeypatch):
+    import sys
+    import types
+
+    module = types.ModuleType("ptools.portage_real")
+
+    class RealPortageBackend:
+        def __init__(self):
+            raise KeyError("/unexpected-root/")
+
+    module.RealPortageBackend = RealPortageBackend
+    monkeypatch.setitem(sys.modules, "ptools.portage_real", module)
+
+    with pytest.raises(PortageIntegrationError, match="cannot initialise the portage backend"):
         get_portage_backend()

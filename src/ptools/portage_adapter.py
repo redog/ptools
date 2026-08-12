@@ -114,9 +114,22 @@ class MockPortageBackend:
 
 
 def get_portage_backend() -> PortageBackend:
-    """Return the real portage backend, or fail with exit code 7."""
+    """Return the real portage backend, or fail with exit code 7.
+
+    Importing ``portage`` reads the whole configuration, so a broken make.conf
+    or profile raises out of the import itself - as a portage exception, not an
+    ImportError. Constructing the backend can fail the same way (``portage.db``
+    has no entry for an unexpected ROOT). Both are portage integration failures
+    and must land on exit 7 rather than escaping as a traceback.
+    """
     try:
         from ptools.portage_real import RealPortageBackend
-    except ImportError as exc:  # pragma: no cover - depends on host
+    except ImportError as exc:
         raise PortageIntegrationError(f"portage Python API not available: {exc}") from exc
-    return RealPortageBackend()
+    except Exception as exc:
+        raise PortageIntegrationError(f"portage configuration failed to load: {exc}") from exc
+
+    try:
+        return RealPortageBackend()
+    except Exception as exc:
+        raise PortageIntegrationError(f"cannot initialise the portage backend: {exc}") from exc
