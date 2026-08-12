@@ -241,9 +241,14 @@ The 5 queued ptools runs are not a reliable way to collect the evidence once
 gumbo comes back. Two reasons:
 
 - GitHub terminates a job that has waited too long for a self-hosted runner to
-  pick it up (~24h). The oldest queued run started waiting `2026-08-11T21:42Z`,
-  so the backlog is expected to expire on its own during 2026-08-12 rather than
-  run.
+  pick it up (~24h). Concretely, as measured at `2026-08-12T00:17Z` the backlog
+  is only ~2.6h old, and the five runs fall out of the queue across one window
+  later today: the oldest (`428aa4b`, waiting since `2026-08-11T21:42Z`) around
+  `2026-08-12T21:42Z`, the newest (`22a165f`, since `2026-08-11T23:57Z`) around
+  `2026-08-12T23:57Z`. So if a runner registers *before* that window the queued
+  runs would in fact drain by themselves — but only `22a165f` is at the current
+  tip, the other four would build superseded commits, and after the window
+  nothing is left to drain at all. Do not plan around them either way.
 - `ci.yml`'s push trigger is path-filtered to `**/*.py`, `pyproject.toml`, and
   `.github/workflows/ci.yml`. Docs-only commits — which is all this repo has
   produced since `22a165f` — do **not** arm a new run, so pushing another note
