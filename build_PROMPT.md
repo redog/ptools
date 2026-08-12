@@ -129,13 +129,28 @@ Still open:
                     repo, security-sensitive file, out of ptools' scope.)
 
                     SECOND, EARLIER BREAK (2026-08-12): nothing on gumbo is
-                    listening at all. redog/dev-env has 3 registered runners
-                    and ALL are offline (labels gumbo,podman), so dev-env's own
+                    listening at all. redog/dev-env had 3 registered runners,
+                    ALL offline (labels gumbo,podman), so dev-env's own
                     update-gumbo.yml (runs-on: gumbo) has been queued since
                     2026-08-11 too. So a start-env.sh fix could not even be
                     delivered to the host remotely. Both breaks require someone
                     at the gumbo console, runner bring-up first. Nothing about
                     the gumbo leg is actionable from liminal.
+                    UPDATE (later on 2026-08-12): dev-env's runner count is now
+                    total_count 0 - the three offline registrations have been
+                    reaped. Same conclusion, fewer moving parts: no runner
+                    record exists for gumbo in either repo.
+
+                    WHEN GUMBO RETURNS, re-trigger explicitly; do not wait on
+                    the 5 queued runs. GitHub expires jobs that wait ~24h for a
+                    self-hosted runner (the backlog dates from 2026-08-11T21:42Z),
+                    and ci.yml's push trigger is path-filtered to **/*.py,
+                    pyproject.toml, and ci.yml - so docs commits, which is all
+                    this repo has produced since 22a165f, will not re-queue it:
+                      gh workflow run ci.yml -R redog/ptools --ref main
+                    ci.yml already declares workflow_dispatch. See
+                    docs/gentoo-validation.md "Do not count on the queued runs
+                    to drain".
   Milestone F     : everything except the gumbo leg is DONE and green -
                     ruff check, ruff format --check, mypy strict, pytest
                     (156 passed, 97.15% vs the 85% gate), python -m build

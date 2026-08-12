@@ -207,19 +207,23 @@ that repo flags as security-sensitive, and it is out of scope for ptools.
 Fixing `start-env.sh` would not, by itself, start the ptools leg — the trigger
 chain is already dead one link earlier:
 
-- `gh api repos/redog/dev-env/actions/runners` → `total_count` 3, and **all
-  three are `"status": "offline"`** (ids 137, 138, 140; labels
+- `gh api repos/redog/dev-env/actions/runners` first returned `total_count` 3
+  with **all three `"status": "offline"`** (ids 137, 138, 140; labels
   `self-hosted, Linux, X64, gumbo, podman` — the generic `devenv-runner`).
+- Re-checked later the same day, that endpoint returns **`total_count` 0**: the
+  three offline registrations are gone, so even the stale registrations have now
+  been reaped. The conclusion does not change, it only gets simpler — there is
+  no runner record for gumbo anywhere.
 - dev-env's `update-gumbo.yml` is `runs-on: gumbo`, so it needs one of those to
-  be online. Its runs have been **queued since 2026-08-11** (5 of them, oldest
-  ~4h at time of checking).
+  be online. Its runs have been **queued since 2026-08-11** (6 of them, oldest
+  ~4h30m at time of checking).
 
-That is the opposite of ptools' own situation and worth keeping distinct:
+Both repos are now in the same state, though they arrived there differently:
 
-| repo | runners registered | state | consequence |
-|------|--------------------|-------|-------------|
+| repo | runners registered | history | consequence |
+|------|--------------------|---------|-------------|
 | `redog/ptools` | 0 | never registered | needs `run-runners.sh` on gumbo |
-| `redog/dev-env` | 3 | all offline | nothing on gumbo is listening |
+| `redog/dev-env` | 0 | 3 registered, went offline, then reaped | nothing on gumbo is listening |
 
 Net: no process on gumbo is polling GitHub, so nothing can be triggered
 remotely — not the ptools leg, and not the dev-env self-update that would carry
@@ -230,3 +234,27 @@ security boundary.
 The gentoo image runs `emerge-webrsync` at build time
 (`Containerfile.gentoo`), so the integration suite will have a real ebuild
 repository and the skip-guard should pass once a runner registers.
+
+## Do not count on the queued runs to drain
+
+The 5 queued ptools runs are not a reliable way to collect the evidence once
+gumbo comes back. Two reasons:
+
+- GitHub terminates a job that has waited too long for a self-hosted runner to
+  pick it up (~24h). The oldest queued run started waiting `2026-08-11T21:42Z`,
+  so the backlog is expected to expire on its own during 2026-08-12 rather than
+  run.
+- `ci.yml`'s push trigger is path-filtered to `**/*.py`, `pyproject.toml`, and
+  `.github/workflows/ci.yml`. Docs-only commits — which is all this repo has
+  produced since `22a165f` — do **not** arm a new run, so pushing another note
+  like this one will not re-queue the leg.
+
+So after runner bring-up, trigger the leg explicitly rather than waiting:
+
+```
+gh workflow run ci.yml -R redog/ptools --ref main
+```
+
+`ci.yml` already declares `workflow_dispatch`, so no workflow change is needed
+for this. That run is what closes Milestone F: its "Assert the integration suite
+actually ran" step is the check that turns a green job into real evidence.
