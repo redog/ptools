@@ -13,7 +13,12 @@ PYTHON: 3.14.6
 PORTAGE: 3.0.81.2
 HARNESS: scripts/chroot_validate.sh + scripts/chroot_inner.sh
 RESULT: all checks passed
-RERUN: 2026-08-12, same chroot, 12 steps, all passed
+RERUN: 2026-08-12, same chroot, 12 steps, all passed. Re-run again at HEAD
+       627766e ("map a broken portage configuration to exit 7"): 13 integration
+       tests passed, all 12 steps passed. This is the run that covers the two
+       portage fixes 705a691 (vdb metadata fallback) and 627766e (exit 7) --
+       both landed after the earlier rerun, so until now neither had executed
+       against real portage on any host.
 ```
 
 The harness is re-runnable: it reuses an extracted chroot and clears the managed
