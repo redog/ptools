@@ -75,7 +75,9 @@ Done:
     on liminal, because gumbo has no registered self-hosted runner (its job has
     been queued since 2026-08-11). docs/environment.md now holds real values;
     docs/gentoo-validation.md records the evidence, including portage actually
-    consuming a generated package.use entry.
+    consuming a generated package.use entry, and (re-run 2026-08-12) the
+    flat-layout refusal checked against a real flat /etc/portage/package.use
+    that portage itself honours - exit 6, file byte-identical by sha256.
   Chroot harness: scripts/chroot_validate.sh + scripts/chroot_inner.sh
                   + scripts/verify_consumption.py
 

@@ -13,7 +13,12 @@ PYTHON: 3.14.6
 PORTAGE: 3.0.81.2
 HARNESS: scripts/chroot_validate.sh + scripts/chroot_inner.sh
 RESULT: all checks passed
+RERUN: 2026-08-12, same chroot, 12 steps, all passed
 ```
+
+The harness is re-runnable: it reuses an extracted chroot and clears the managed
+targets first, so every step produces evidence from a known state rather than
+leftovers from the previous run.
 
 No host configuration was touched: every write landed inside the chroot or in a
 `PTOOLS_CONFIG_ROOT` sandbox under `/tmp`.
@@ -115,6 +120,33 @@ sys-apps/portage: +~amd64 -> /etc/portage/package.accept_keywords/ptools
 
 `~amd64` came from the host's real ARCH, not a default.
 
+## 9. A real flat `package.use` is refused, not clobbered
+
+The flat layout is a legitimate portage configuration, so the refusal had to be
+seen against a real one rather than only a unit-test fixture. `/etc/portage/
+package.use` was replaced with a hand-written **file** carrying an entry portage
+does not otherwise enable, and portage was asked to evaluate it first:
+
+```text
+sys-apps/portage-3.0.81.2 effective USE contains apidoc: True   # from the flat file
+second candidate flag: build
+
+$ puse sys-apps/portage build
+puse: error: /etc/portage/package.use is a regular file; ptools requires the
+directory layout (convert it with: mv /etc/portage/package.use
+/etc/portage/package.use.tmp && mkdir /etc/portage/package.use && mv
+/etc/portage/package.use.tmp /etc/portage/package.use/00-local)
+exit=6
+
+OK: flat file byte-identical after the refusal
+```
+
+Checked by sha256 either side: ptools does not replace the file with a
+directory, does not append to it, and does not truncate it. Reads still work
+under the flat layout — the show form reported `apidoc` in effective USE (portage
+picking up the flat entry) while correctly reporting `managed: (none)`, since
+none of it came from a ptools-managed target.
+
 ## Bug found by this validation
 
 `portage.dep.Atom("cat/pkg").cpv` returns the **cp**, not a cpv, for an
@@ -127,9 +159,9 @@ assertion that a resolved cpv carries a version.
 
 ## Not covered here
 
-- A long-lived, real (non-chroot) Gentoo installation with pre-existing
-  `package.use` content and a flat-layout file. The flat-layout refusal is unit
-  tested but has not been seen against a real flat `/etc/portage/package.use`.
+- A long-lived, real (non-chroot) Gentoo installation with years of accumulated
+  `/etc/portage` content. (The flat-layout gap that used to be listed here is
+  closed — see §9, checked against real portage.)
 - A second architecture; only amd64 was exercised.
 - The gumbo runner leg, which is still queued (the repo has zero registered
   runners, so the queued jobs cannot start; bring-up is a human step on the

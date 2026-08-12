@@ -14,6 +14,13 @@ if [ ! -e /etc/portage/make.profile ]; then
 fi
 readlink -f /etc/portage/make.profile
 
+echo "===== 0b. reset managed state from any previous run ====="
+# The chroot is reused across runs. Without this, steps 5 and 11 would report
+# leftovers from the last run ("managed: ~amd64", "no change") instead of
+# producing the evidence they exist to produce.
+rm -rf /etc/portage/package.use /etc/portage/package.accept_keywords
+echo "cleared /etc/portage/package.use and /etc/portage/package.accept_keywords"
+
 echo "===== 1. host facts ====="
 python3 --version
 python3 -c "import portage; print('portage', portage.VERSION)"
@@ -82,5 +89,33 @@ cat /etc/portage/package.use/ptools
 echo "===== 11. keyword write + portage acceptance ====="
 /opt/venv/bin/pkw --testing "$ANCHOR"
 cat /etc/portage/package.accept_keywords/ptools
+
+echo "===== 12. a REAL flat package.use file is refused, not clobbered ====="
+# The flat layout is a legitimate portage configuration, so ptools must refuse
+# it (exit 6) rather than replace the file with a directory. Seed it with $FLAG
+# and let portage confirm it honours the flat file before ptools ever runs.
+rm -rf /etc/portage/package.use
+printf '# flat layout, hand written\napp-shells/bash net\n%s %s\n' "$ANCHOR" "$FLAG" \
+    > /etc/portage/package.use
+/opt/venv/bin/python scripts/verify_consumption.py check "$ANCHOR" "$FLAG"
+
+# $FLAG is enabled now, so `pick` necessarily returns a different flag.
+FLAG2=$(/opt/venv/bin/python scripts/verify_consumption.py pick "$ANCHOR")
+echo "second candidate flag: $FLAG2"
+BEFORE=$(sha256sum /etc/portage/package.use | cut -d' ' -f1)
+set +e
+/opt/venv/bin/puse "$ANCHOR" "$FLAG2"
+RC=$?
+set -e
+echo "exit=$RC  (expected 6)"
+[ "$RC" -eq 6 ] || { echo "FAIL: expected exit 6 under a flat layout"; exit 1; }
+[ -f /etc/portage/package.use ] || { echo "FAIL: flat file is no longer a file"; exit 1; }
+AFTER=$(sha256sum /etc/portage/package.use | cut -d' ' -f1)
+[ "$BEFORE" = "$AFTER" ] || { echo "FAIL: flat file was modified"; exit 1; }
+echo "OK: flat file byte-identical after the refusal"
+
+# Reading must still work under a flat layout: it goes through portage, not the
+# managed target, and portage's own USE evaluation includes the flat entry.
+/opt/venv/bin/puse "$ANCHOR"
 
 echo "===== ALL CHECKS COMPLETE ====="
