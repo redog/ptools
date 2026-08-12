@@ -158,7 +158,7 @@ Still open:
                     the documentation/migration work above. The single
                     outstanding criterion is the integration suite passing on
                     gumbo as a second, independent Gentoo host. (It already
-                    passes on real portage in the stage3 chroot: 12 passed,
+                    passes on real portage in the stage3 chroot: 13 passed,
                     see docs/gentoo-validation.md §1.)
 ```
 

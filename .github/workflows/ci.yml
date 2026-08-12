@@ -79,7 +79,7 @@ jobs:
           . .venv/bin/activate
           # A skipped integration test is not a passing one. Milestone F needs
           # real-portage coverage on this host, so treat any skip as a failure.
-          # --no-cov: pyproject bakes in --cov-fail-under=85, which the 12
+          # --no-cov: pyproject bakes in --cov-fail-under=85, which the
           # integration tests alone cannot meet. The full run above owns the
           # coverage gate; this run only proves the suite executed.
           pytest -m integration -q --no-cov --junitxml=integration.xml
