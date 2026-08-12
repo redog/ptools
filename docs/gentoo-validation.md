@@ -182,10 +182,51 @@ validated `containers.list`/`projects.list`. So `start-env.sh` calling it with
 no network-derived arguments would *not* widen the `authorized_keys`
 `command=` gate; the pinned command stays
 `start-env.sh --rebuild --persist` and `$SSH_ORIGINAL_COMMAND` is still only
-honoured when it is exactly `update`. The countervailing point is that the same
-header says the split exists "so start-env.sh does not have to ... Keep it that
-way", i.e. the separation looks deliberate rather than unfinished, which is why
-this stays an OPEN question for the user rather than an obvious fix.
+honoured when it is exactly `update`.
+
+Re-read on 2026-08-12, this leans further toward "unfinished" than the earlier
+note allowed. dev-env's README architecture diagram documents the forced command
+as chaining into exactly that call:
+
+```
+│ authorized_keys command= forces   │
+│  start-env.sh --rebuild --persist │
+│   → update-configs.sh sync        │
+│   → rebuild + run-runners.sh      │
+```
+
+So the README describes behavior `start-env.sh` does not implement — the gap is
+between the code and dev-env's own stated design, not a boundary someone chose
+to hold. The `run-runners.sh` header's "so start-env.sh does not have to" reads,
+in that light, as *why the network-input handling lives elsewhere*, not as a bar
+on calling it. This still stays OPEN: it is a change to another repo, in a file
+that repo flags as security-sensitive, and it is out of scope for ptools.
+
+## The host is not listening at all (checked 2026-08-12)
+
+Fixing `start-env.sh` would not, by itself, start the ptools leg — the trigger
+chain is already dead one link earlier:
+
+- `gh api repos/redog/dev-env/actions/runners` → `total_count` 3, and **all
+  three are `"status": "offline"`** (ids 137, 138, 140; labels
+  `self-hosted, Linux, X64, gumbo, podman` — the generic `devenv-runner`).
+- dev-env's `update-gumbo.yml` is `runs-on: gumbo`, so it needs one of those to
+  be online. Its runs have been **queued since 2026-08-11** (5 of them, oldest
+  ~4h at time of checking).
+
+That is the opposite of ptools' own situation and worth keeping distinct:
+
+| repo | runners registered | state | consequence |
+|------|--------------------|-------|-------------|
+| `redog/ptools` | 0 | never registered | needs `run-runners.sh` on gumbo |
+| `redog/dev-env` | 3 | all offline | nothing on gumbo is listening |
+
+Net: no process on gumbo is polling GitHub, so nothing can be triggered
+remotely — not the ptools leg, and not the dev-env self-update that would carry
+a `start-env.sh` fix to the host. Both breaks need someone at the gumbo console,
+and the runner-container bring-up has to come first. Until then the gumbo leg of
+Milestone F cannot be attempted from liminal by any means that respects the
+security boundary.
 The gentoo image runs `emerge-webrsync` at build time
 (`Containerfile.gentoo`), so the integration suite will have a real ebuild
 repository and the skip-guard should pass once a runner registers.

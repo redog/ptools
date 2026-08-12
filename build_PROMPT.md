@@ -122,6 +122,20 @@ Still open:
                     "Why the gumbo leg cannot start". Teaching start-env.sh to
                     call run-runners.sh is a dev-env change in a security-
                     sensitive file - OPEN, ask the user; do not do it silently.
+                    (Refinement: dev-env's README diagram documents the forced
+                    command as chaining "-> rebuild + run-runners.sh", which
+                    start-env.sh does not do - so that gap is code-vs-its-own-
+                    design, not a boundary held on purpose. Still OPEN: other
+                    repo, security-sensitive file, out of ptools' scope.)
+
+                    SECOND, EARLIER BREAK (2026-08-12): nothing on gumbo is
+                    listening at all. redog/dev-env has 3 registered runners
+                    and ALL are offline (labels gumbo,podman), so dev-env's own
+                    update-gumbo.yml (runs-on: gumbo) has been queued since
+                    2026-08-11 too. So a start-env.sh fix could not even be
+                    delivered to the host remotely. Both breaks require someone
+                    at the gumbo console, runner bring-up first. Nothing about
+                    the gumbo leg is actionable from liminal.
   Milestone F     : everything except the gumbo leg is DONE and green -
                     ruff check, ruff format --check, mypy strict, pytest
                     (156 passed, 97.15% vs the 85% gate), python -m build
