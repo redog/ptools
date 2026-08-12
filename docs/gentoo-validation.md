@@ -152,6 +152,53 @@ under the flat layout — the show form reported `apidoc` in effective USE (port
 picking up the flat entry) while correctly reporting `managed: (none)`, since
 none of it came from a ptools-managed target.
 
+## 10. A bare atom in `package.accept_keywords` really does mean `~ARCH`
+
+Measured 2026-08-12 in the same chroot (portage 3.0.81.2, profile
+`default/linux/amd64/23.0`), because the OPEN decision in `build_PROMPT.md` §3
+rests on this being true of *real* portage and not just of the wiki.
+
+Method: pick a package whose newest version is keyword-masked, then ask
+`portdb.xmatch("bestmatch-visible", …)` in a fresh process at each step.
+
+```text
+candidate: app-accessibility/at-spi2-core  stable=2.58.6  newest=2.60.5
+           (newest KEYWORDS has ~amd64, no amd64)
+
+no entry at all          -> bestmatch-visible 2.58.6
+bare atom, no tokens     -> bestmatch-visible 2.60.5
+explicit "atom ~amd64"   -> bestmatch-visible 2.60.5
+```
+
+`ACCEPT_KEYWORDS` stayed `amd64` throughout, so the change came from the file.
+The bare atom and the explicit `~amd64` line are **indistinguishable** in effect.
+
+Against a managed target containing such a line, ptools today:
+
+```text
+$ pkw app-accessibility/at-spi2-core            # show
+  ...
+  managed:                (none)                # <- inaccurate, see below
+show exit=0
+
+$ pkw --testing app-accessibility/at-spi2-core  # mutate
+pkw: error: entry for app-accessibility/at-spi2-core in
+/etc/portage/package.accept_keywords/ptools line 2 has no values
+mutate exit=6
+file unchanged: yes
+```
+
+Two separate observations, only the second of which is the OPEN decision:
+
+1. **The mutation refusal** (`config_store.py:122-125`). The file is left
+   byte-identical, which is the safe side — but the message says "has no
+   values" when the line does in fact carry meaning.
+2. **The show path reports `managed: (none)`** even though the managed target is
+   the reason portage is accepting `~amd64` here. That is a read-path
+   inaccuracy, and it is wrong under every option for (1), including "leave as
+   is". Note it reads differently from the identical-looking `managed: (none)`
+   in §9: there the managed target genuinely contributed nothing.
+
 ## Bug found by this validation
 
 `portage.dep.Atom("cat/pkg").cpv` returns the **cp**, not a cpv, for an

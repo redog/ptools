@@ -209,11 +209,25 @@ OPEN: bare atom in the managed package.accept_keywords file (found 2026-08-12).
   Verified at the store level; the target file is left byte-identical.
   For package.use a valueless entry really is meaningless, so the current
   behavior is right there - the question is only about the keywords file.
+
+  CONFIRMED AGAINST REAL PORTAGE (2026-08-12, chroot, portage 3.0.81.2): the
+  premise is not just wiki lore. With ACCEPT_KEYWORDS=amd64 unchanged, adding a
+  bare `app-accessibility/at-spi2-core` moved bestmatch-visible from 2.58.6 to
+  the ~amd64-only 2.60.5 - byte-for-byte the same effect as the explicit
+  `atom ~amd64` control. Evidence: docs/gentoo-validation.md §10.
+
   Options: (a) keep refusing, but say why - that the bare atom already means
   ~ARCH and how to proceed; (b) treat it as an implicit ~ARCH value and merge
   the requested keyword into it; (c) leave exactly as is.
   NOT changed unilaterally: this is the safety-critical store, refusing is the
   side that cannot mangle a config, and §1 says a new decision stops the loop.
+
+  SEPARATE, NOT BLOCKED BY THE ABOVE (same probe): the *show* path prints
+  "managed: (none)" for such a file, even though that managed target is exactly
+  why portage accepts ~ARCH. That is wrong under (a), (b) AND (c), so it is a
+  read-path bug rather than part of this decision - but it is in the same code
+  neighbourhood, so fix it together with whatever (a)/(b)/(c) becomes rather
+  than touching read_values twice.
 ```
 
 ---
