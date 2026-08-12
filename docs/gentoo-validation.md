@@ -20,10 +20,10 @@ No host configuration was touched: every write landed inside the chroot or in a
 
 ## 1. Integration suite
 
-`pytest -m integration` — **12 passed**. Covers a category-qualified atom, an
-exact atom, an invalid atom, an ambiguous unqualified name, a unique unqualified
-name, USE/keyword reads, a sandboxed write with preservation, CLI round trips,
-and dry-run.
+`pytest -m integration` — **13 passed, 0 skipped**. Covers a category-qualified
+atom, an exact atom, an invalid atom, an ambiguous unqualified name, a unique
+unqualified name, USE/keyword reads, the vdb metadata fallback, a sandboxed write
+with preservation, CLI round trips, and dry-run.
 
 ## 2. Read-only operation, non-root
 

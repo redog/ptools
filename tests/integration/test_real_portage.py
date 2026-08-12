@@ -8,6 +8,7 @@ import pytest
 
 from ptools import pkw, puse
 from ptools.config_store import ConfigStore
+from ptools.domain import ResolvedPackage
 from ptools.errors import AmbiguousPackageError, PackageNotFoundError
 from ptools.portage_adapter import get_portage_backend
 from ptools.services import MutationService, ReadOnlyService
@@ -103,6 +104,39 @@ def test_unqualified_name_resolves_when_unique(backend, all_cp, name_counts):
         pytest.skip("every package name is ambiguous in this repository")
 
     assert backend.resolve(unique.split("/")[-1]).cp == unique
+
+
+def test_metadata_reads_fall_back_to_the_vdb(backend):
+    """Regression: a package installed but no longer in the tree.
+
+    Such a package (dropped from ::gentoo, or from an overlay that is gone)
+    resolves its cpv out of the vdb, so every metadata read must query the vdb
+    too -- asking portdb for a cpv it does not carry raises, which surfaced as a
+    portage error (exit 7) on a plain ``puse PACKAGE`` show.
+
+    Built deterministically from an always-installed anchor rather than by
+    hunting for a real dropped package, so this never skips.
+    """
+    installed = backend.resolve(ANCHOR)
+    assert installed.installed_versions
+
+    # The shape resolve() produces when only the vdb matched.
+    vdb_only = ResolvedPackage(
+        atom=ANCHOR,
+        cp=ANCHOR,
+        cpv=installed.installed_versions[-1],
+        installed_versions=installed.installed_versions,
+        repository_versions=(),
+    )
+
+    assert backend._db_for(vdb_only) is backend.vardb
+    assert backend._db_for(installed) is backend.portdb
+
+    # The fallback db must actually satisfy both kinds of read.
+    assert backend._aux(backend.vardb, vdb_only.cpv, "IUSE")
+    settings = portage.config(clone=backend.settings)
+    settings.setcpv(vdb_only.cpv, mydb=backend.vardb)
+    assert settings.get("PORTAGE_USE", settings.get("USE", ""))
 
 
 def test_use_state_reads(backend, sandbox):

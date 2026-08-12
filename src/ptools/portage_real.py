@@ -79,13 +79,22 @@ class RealPortageBackend:
         except PortageException as exc:
             raise PortageIntegrationError(f"cannot read {key} for {cpv}: {exc}") from exc
 
+    def _db_for(self, resolved: ResolvedPackage) -> Any:
+        """The db that actually carries ``resolved.cpv``.
+
+        A package that is installed but no longer in the tree resolves its cpv out
+        of the vdb; asking portdb to look that cpv up raises instead of returning
+        metadata. Every metadata read must go through here.
+        """
+        return self.portdb if resolved.repository_versions else self.vardb
+
     def effective_use(self, atom: str) -> tuple[str, ...]:
         resolved = self.resolve(atom)
         if not resolved.cpv:
             return ()
         settings = portage.config(clone=self.settings)
         try:
-            settings.setcpv(resolved.cpv, mydb=self.portdb)
+            settings.setcpv(resolved.cpv, mydb=self._db_for(resolved))
         except Exception as exc:
             raise PortageIntegrationError(f"cannot evaluate USE for {atom}: {exc}") from exc
         return tuple(sorted(settings.get("PORTAGE_USE", settings.get("USE", "")).split()))
@@ -100,15 +109,13 @@ class RealPortageBackend:
         resolved = self.resolve(atom)
         if not resolved.cpv:
             return ()
-        db = self.portdb if resolved.repository_versions else self.vardb
-        return self._aux(db, resolved.cpv, "IUSE")
+        return self._aux(self._db_for(resolved), resolved.cpv, "IUSE")
 
     def keywords(self, atom: str) -> tuple[str, ...]:
         resolved = self.resolve(atom)
         if not resolved.cpv:
             return ()
-        db = self.portdb if resolved.repository_versions else self.vardb
-        return self._aux(db, resolved.cpv, "KEYWORDS")
+        return self._aux(self._db_for(resolved), resolved.cpv, "KEYWORDS")
 
     def get_setting(self, key: str, default: str = "") -> str:
         value = self.settings.get(key, default)
