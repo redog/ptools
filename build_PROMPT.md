@@ -107,8 +107,12 @@ Still open:
                     (8 runs queued as of 2026-08-12T01:20Z; re-confirmed
                     total_count 0 on BOTH redog/ptools and redog/dev-env).
                     The newest queued run, 627766e, covers exactly the code at
-                    HEAD - the two commits after it are docs-only - so a runner
-                    registering before ~2026-08-13T00:59Z would drain valid
+                    HEAD - re-verified 2026-08-12T01:59Z, now FIVE commits later
+                    (3126461, d747e71, ed5900b, 85d1ebd, c9a4ca3): `git diff
+                    --stat 627766e..HEAD` touches only build_PROMPT.md,
+                    docs/build-and-test.md and docs/gentoo-validation.md, so no
+                    .py or pyproject.toml has moved. A runner registering before
+                    ~2026-08-13T00:59Z would therefore still drain valid
                     evidence for the current tree. Still do not wait on it.
 
                     CORRECTION (2026-08-12, read against the dev-env tree): the
