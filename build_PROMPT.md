@@ -102,7 +102,8 @@ Still open:
                     from the queue: `gh api repos/redog/ptools/actions/runners`
                     returns total_count 0, so no runner has ever registered -
                     bring-up still pending, NOT a registered runner gone offline
-                    (5 runs queued as of 2026-08-12).
+                    (7 runs queued as of 2026-08-12T00:40Z; re-confirmed
+                    total_count 0 on BOTH redog/ptools and redog/dev-env).
 
                     CORRECTION (2026-08-12, read against the dev-env tree): the
                     bring-up command previously recorded here was insufficient.
@@ -142,11 +143,12 @@ Still open:
                     record exists for gumbo in either repo.
 
                     WHEN GUMBO RETURNS, re-trigger explicitly; do not wait on
-                    the 5 queued runs. GitHub expires jobs that wait ~24h for a
-                    self-hosted runner (the backlog dates from 2026-08-11T21:42Z),
+                    the queued runs. GitHub expires jobs that wait ~24h for a
+                    self-hosted runner (the backlog dates from 2026-08-11T21:42Z,
+                    so it drains away across 2026-08-12T21:42Z..08-13T00:33Z),
                     and ci.yml's push trigger is path-filtered to **/*.py,
-                    pyproject.toml, and ci.yml - so docs commits, which is all
-                    this repo has produced since 22a165f, will not re-queue it:
+                    pyproject.toml, and ci.yml - so a docs-only commit will not
+                    re-queue it:
                       gh workflow run ci.yml -R redog/ptools --ref main
                     ci.yml already declares workflow_dispatch. See
                     docs/gentoo-validation.md "Do not count on the queued runs
