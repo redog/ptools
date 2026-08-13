@@ -1,4 +1,4 @@
-# ptools by redog
+# ptools by redog [![CI](https://github.com/redog/ptools/actions/workflows/ci.yml/badge.svg)](https://github.com/redog/ptools/actions/workflows/ci.yml)
 
 Two small commands for editing per-package Portage configuration: **`puse`** for
 USE flags and **`pkw`** for keywords. `ptools` is the distribution name — it is
