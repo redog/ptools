@@ -173,7 +173,8 @@ explicit "atom ~amd64"   -> bestmatch-visible 2.60.5
 `ACCEPT_KEYWORDS` stayed `amd64` throughout, so the change came from the file.
 The bare atom and the explicit `~amd64` line are **indistinguishable** in effect.
 
-Against a managed target containing such a line, ptools today:
+Against a managed target containing such a line, ptools *before the resolution
+below* behaved like this:
 
 ```text
 $ pkw app-accessibility/at-spi2-core            # show
@@ -188,7 +189,7 @@ mutate exit=6
 file unchanged: yes
 ```
 
-Two separate observations, only the second of which is the OPEN decision:
+Two separate observations, only the second of which was the OPEN decision:
 
 1. **The mutation refusal** (`config_store.py:122-125`). The file is left
    byte-identical, which is the safe side — but the message says "has no
@@ -198,6 +199,23 @@ Two separate observations, only the second of which is the OPEN decision:
    inaccuracy, and it is wrong under every option for (1), including "leave as
    is". Note it reads differently from the identical-looking `managed: (none)`
    in §9: there the managed target genuinely contributed nothing.
+
+**RESOLVED 2026-08-13 (user decision): option (b) — treat the bare atom as an
+implicit `~ARCH` value**, matching the measured portage behavior above. What
+changed (`config_store.py` grew an `implicit` parameter that only the keyword
+paths in `services.py` supply; `package.use` still refuses a valueless entry
+with exit 6):
+
+- *show* reports the bare entry as `managed: ~ARCH` instead of `(none)`;
+- *set* merges requested keywords into the implicit value — `pkw --testing` on
+  a bare entry is a no-op (`changed: false`, file byte-identical, since the
+  entry already accepts `~ARCH`), while adding a different keyword rewrites the
+  line with the implicit value made explicit (`atom` → `atom ~amd64 -*`);
+- *unset* of `~ARCH` on a bare entry removes it, like any emptied entry.
+
+Locked in by unit tests in `tests/unit/test_config_store.py` (bare-entry
+read/set/unset, and that a semantic no-op never rewrites bytes) and
+`tests/unit/test_pkw.py` (show/set/unset through the CLI).
 
 ## Bug found by this validation
 
