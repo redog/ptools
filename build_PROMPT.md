@@ -94,8 +94,19 @@ Environment override:
     documented targets to what the tools report, and [project.scripts] to
     puse+pkw only. Stale SPEC sections are marked SUPERSEDED.
 
-Still open:
-  Gumbo runner    : the CONFIG is already correct on both sides - dev-env
+Previously open, both closed 2026-08-13:
+  Gumbo runner    : RESOLVED - a runner registered on gumbo and CI is GREEN.
+                    Runner "gumbo-redog-ptools-gentoo-dev-1786649740" (id 25,
+                    labels self-hosted,gumbo,gentoo-dev) picked up run #10
+                    (627766e, attempt 2) and it succeeded at 2026-08-13T19:38Z
+                    with every step green, including "Run test suite" and
+                    "Assert the integration suite actually ran" - so the
+                    integration suite really ran on gumbo against real portage.
+                    `git diff --stat 627766e..HEAD` at that moment was
+                    docs-only, so the run covers HEAD's code exactly.
+                    The bring-up analysis below is kept for context only.
+                    ORIGINAL RECORD: the CONFIG is already correct on both
+                    sides - dev-env
                     containers.list enables gentoo-dev and projects.list has
                     `redog/ptools : gentoo-dev`. What is missing is bring-up ON
                     the gumbo host, which by design has no inbound path from
@@ -163,15 +174,16 @@ Still open:
                     ci.yml already declares workflow_dispatch. See
                     docs/gentoo-validation.md "Do not count on the queued runs
                     to drain".
-  Milestone F     : everything except the gumbo leg is DONE and green -
-                    ruff check, ruff format --check, mypy strict, pytest
-                    (158 passed, 97.39% vs the 85% gate), python -m build
-                    (sdist + wheel), python -m twine check (both PASSED), and
-                    the documentation/migration work above. The single
-                    outstanding criterion is the integration suite passing on
-                    gumbo as a second, independent Gentoo host. (It already
-                    passes on real portage in the stage3 chroot: 13 passed,
-                    see docs/gentoo-validation.md §1.)
+  Milestone F     : DONE (2026-08-13). The last outstanding criterion - the
+                    integration suite passing on gumbo as a second, independent
+                    Gentoo host - was met by run #10 attempt 2 (see Gumbo
+                    runner above). Everything else was already green and still
+                    is after the bare-atom keywords change: ruff check, ruff
+                    format --check, mypy strict, pytest (163 passed, 97.01% vs
+                    the 85% gate), python -m build (sdist + wheel), python -m
+                    twine check (both PASSED), and the documentation/migration
+                    work above. (The suite also passes on real portage in the
+                    stage3 chroot: 13 passed, docs/gentoo-validation.md §1.)
 ```
 
 Legacy originals `ptk.py`/`puse.py`/`pkw.py` are **deleted from the tree**; they
@@ -202,7 +214,18 @@ Minimum Python: 3.11 (from pyproject; supersedes the old "unresolved" placeholde
 Target ARCH / Portage version: read from the real system (Milestone D); never assume amd64.
 Backup Policy / Layout / Wrappers: confirmed above — no longer open.
 
-OPEN: bare atom in the managed package.accept_keywords file (found 2026-08-12).
+RESOLVED (2026-08-13, user decision: option b): bare atom in the managed
+  package.accept_keywords file (found 2026-08-12).
+  A bare atom is treated as an implicit ~ARCH value: the show path reports it
+  as `managed: ~ARCH` (not "(none)"), a set merges requested keywords into it
+  (a semantic no-op like `pkw --testing` leaves the file byte-identical and
+  reports changed:false; a real change rewrites the line with the implicit
+  value made explicit), and unset of ~ARCH removes the entry. Implemented as an
+  `implicit` parameter on ConfigStore.read_values/apply_mutation that ONLY the
+  keyword paths in services.py supply — package.use still refuses a valueless
+  entry with exit 6, unchanged. Covered by tests/unit/test_config_store.py and
+  tests/unit/test_pkw.py; evidence and history in docs/gentoo-validation.md §10.
+  The original record of the decision follows, kept for context.
   A line that is just an atom, with no tokens, is a LEGITIMATE portage entry in
   package.accept_keywords - it means "accept ~ARCH for this package". ptools
   never writes one (an emptied entry is deleted, a new entry always has values),
@@ -232,6 +255,7 @@ OPEN: bare atom in the managed package.accept_keywords file (found 2026-08-12).
   read-path bug rather than part of this decision - but it is in the same code
   neighbourhood, so fix it together with whatever (a)/(b)/(c) becomes rather
   than touching read_values twice.
+  [Done: both were fixed together in the option-(b) change described above.]
 ```
 
 ---
@@ -369,7 +393,8 @@ E. DONE (stage3 chroot; see docs/gentoo-validation.md) - Validate on current Gen
    Done when: docs/gentoo-validation.md records profile, portage+python versions,
      layouts, and exact results incl. portage consuming a generated sandbox entry.
 
-F. BLOCKED on the gumbo runner only - everything else DONE (see §2):
+F. DONE (2026-08-13 - gumbo runner registered and run #10 attempt 2 green,
+   integration suite included; see §2):
    Release candidate (no publish):
    What: machine-checked docs + migration notes; all gates green; build artifacts.
    Done when: ruff check + format check pass; mypy passes; pytest >=85%; all

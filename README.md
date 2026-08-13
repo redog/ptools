@@ -144,6 +144,12 @@ by `PTOOLS_CONFIG_ROOT`.
   atomic replace. Keep `/etc` under git if you want history.
 - **Duplicates fail.** Two entries for the same atom are an error (exit 6)
   unless you pass `--merge-duplicates`.
+- **Bare keyword atoms.** In `package.accept_keywords` a line that is just an
+  atom means "accept `~ARCH`" — portage semantics. `pkw` reports it as a
+  managed `~ARCH` entry, merges new keywords into it (writing the implicit
+  value out explicitly), treats re-adding `~ARCH` as `no change`, and removes
+  the entry when `~ARCH` is unset. In `package.use` a valueless entry carries
+  no meaning and is refused (exit 6).
 - **Directory layout only.** If `package.use` or `package.accept_keywords`
   already exists as a regular file (the old flat layout), ptools refuses with
   exit 6 and prints the `mv`/`mkdir` sequence to migrate by hand — it does not

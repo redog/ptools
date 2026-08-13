@@ -174,6 +174,55 @@ def test_valueless_managed_entry_is_invalid(tmp_path):
         ConfigStore().apply_mutation(path, mutation("set", "lua"))
 
 
+def test_bare_entry_with_implicit_value_is_read_as_that_value(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM}\n")
+
+    assert ConfigStore().read_values(path, ATOM, implicit=("~amd64",)) == ("~amd64",)
+
+
+def test_setting_the_implicit_value_on_a_bare_entry_is_a_no_op(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM}\n")
+
+    result = ConfigStore().apply_mutation(path, mutation("set", "~amd64"), implicit=("~amd64",))
+
+    assert result.changed is False
+    assert result.added == ()
+    assert path.read_text() == f"{ATOM}\n"  # the bare entry stays byte-for-byte
+
+
+def test_setting_a_new_value_on_a_bare_entry_makes_the_implicit_explicit(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM}\n")
+
+    result = ConfigStore().apply_mutation(path, mutation("set", "-*"), implicit=("~amd64",))
+
+    assert result.added == ("-*",)
+    assert result.removed == ()
+    assert path.read_text() == f"{ATOM} ~amd64 -*\n"
+
+
+def test_unsetting_the_implicit_value_removes_the_bare_entry(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"# note\n{ATOM}\nsys-apps/portage ~amd64\n")
+
+    result = ConfigStore().apply_mutation(path, mutation("unset", "~amd64"), implicit=("~amd64",))
+
+    assert result.removed == ("~amd64",)
+    assert path.read_text() == "# note\nsys-apps/portage ~amd64\n"
+
+
+def test_semantic_no_op_preserves_nonstandard_spacing(tmp_path):
+    path = tmp_path / "ptools"
+    path.write_text(f"{ATOM}   lua\n")
+
+    result = ConfigStore().apply_mutation(path, mutation("set", "lua"))
+
+    assert result.changed is False
+    assert path.read_text() == f"{ATOM}   lua\n"
+
+
 def test_non_utf8_target_is_invalid(tmp_path):
     path = tmp_path / "ptools"
     path.write_bytes(b"\xff\xfe not utf-8\n")

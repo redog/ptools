@@ -92,12 +92,20 @@ class ConfigStore:
         except OSError as exc:
             raise InvalidConfigError(f"cannot read {file_path}: {exc.strerror}") from exc
 
-    def read_values(self, file_path: Path, atom: str) -> tuple[str, ...]:
-        """Values currently managed for ``atom``; empty if it has no entry."""
+    def read_values(
+        self, file_path: Path, atom: str, implicit: tuple[str, ...] = ()
+    ) -> tuple[str, ...]:
+        """Values currently managed for ``atom``; empty if it has no entry.
+
+        ``implicit`` is what a bare (valueless) entry means in this file: in
+        package.accept_keywords a lone atom accepts ``~ARCH`` (verified against
+        real portage, docs/gentoo-validation.md §10), while in package.use a
+        bare entry means nothing and ``implicit`` stays empty.
+        """
         lines = parse_file(self.read(file_path))
         values: list[str] = []
         for index in self._select(lines, atom, file_path):
-            values.extend(lines[index].values)
+            values.extend(lines[index].values or implicit)
         return tuple(dict.fromkeys(values))
 
     def _select(self, lines: list[ParsedLine], atom: str, file_path: Path) -> list[int]:
@@ -112,18 +120,20 @@ class ConfigStore:
 
     # -- mutating --------------------------------------------------------
 
-    def apply_mutation(self, file_path: Path, mutation: ConfigMutation) -> MutationResult:
+    def apply_mutation(
+        self, file_path: Path, mutation: ConfigMutation, implicit: tuple[str, ...] = ()
+    ) -> MutationResult:
         before = self.read(file_path)
         lines = parse_file(before)
         selected = self._select(lines, mutation.atom, file_path)
 
         old_values: tuple[str, ...] = ()
         for index in selected:
-            if not lines[index].values:
+            if not lines[index].values and not implicit:
                 raise InvalidConfigError(
                     f"entry for {mutation.atom} in {file_path} line {index + 1} has no values"
                 )
-            old_values += lines[index].values
+            old_values += lines[index].values or implicit
         old_values = tuple(dict.fromkeys(old_values))
 
         if mutation.operation == "set":
@@ -132,7 +142,7 @@ class ConfigStore:
             new_values = apply_unset(old_values, mutation.values)
 
         rendered = [line.raw for line in lines]
-        if selected:
+        if selected and not (len(selected) == 1 and new_values == old_values):
             keep = selected[0]
             if new_values:
                 rendered[keep] = render_line(lines[keep], new_values)
@@ -140,7 +150,7 @@ class ConfigStore:
                 rendered[keep] = ""
             for index in selected[1:]:
                 rendered[index] = ""
-        elif new_values:
+        elif not selected and new_values:
             if rendered and not rendered[-1].endswith("\n"):
                 rendered[-1] += "\n"
             rendered.append(f"{mutation.atom} {' '.join(new_values)}\n")

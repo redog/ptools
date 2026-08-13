@@ -35,6 +35,11 @@ class _Service:
             raise PackageNotFoundError(f"no version available to pin for {atom}")
         return f"={package.cpv}"
 
+    def keyword_implicit(self) -> tuple[str, ...]:
+        """What a bare atom means in package.accept_keywords: accept ``~ARCH``."""
+        arch = self.backend.get_setting("ARCH", "")
+        return (f"~{arch}",) if arch else ()
+
 
 class ReadOnlyService(_Service):
     def resolve(self, atom: str) -> dict[str, Any]:
@@ -77,7 +82,9 @@ class ReadOnlyService(_Service):
             "arch": self.backend.get_setting("ARCH", ""),
             "installed": list(package.installed_versions),
             "keywords": list(self.backend.keywords(atom)),
-            "managed": list(self.store.read_values(target, managed_atom)),
+            "managed": list(
+                self.store.read_values(target, managed_atom, implicit=self.keyword_implicit())
+            ),
             "target": str(target),
             "legacy_package_keywords": legacy.exists(),
         }
@@ -93,7 +100,13 @@ class MutationService(_Service):
         self, operation: Operation, atom: str, keywords: tuple[str, ...], exact: bool = False
     ) -> dict[str, Any]:
         return self._apply(
-            "keyword", keyword_target(self.config_root), operation, atom, keywords, exact
+            "keyword",
+            keyword_target(self.config_root),
+            operation,
+            atom,
+            keywords,
+            exact,
+            implicit=self.keyword_implicit(),
         )
 
     def _apply(
@@ -104,10 +117,13 @@ class MutationService(_Service):
         atom: str,
         values: tuple[str, ...],
         exact: bool,
+        implicit: tuple[str, ...] = (),
     ) -> dict[str, Any]:
         managed_atom = self.target_atom(atom, exact)
         result = self.store.apply_mutation(
-            target, ConfigMutation(operation=operation, atom=managed_atom, values=values)
+            target,
+            ConfigMutation(operation=operation, atom=managed_atom, values=values),
+            implicit=implicit,
         )
         return {
             "operation": f"{domain}.{operation}",

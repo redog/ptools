@@ -82,6 +82,45 @@ def test_unset(backend, config_root, keyword_file):
     assert not keyword_file.read_text()
 
 
+def test_show_reports_a_bare_managed_entry_as_the_testing_keyword(
+    backend, config_root, keyword_file, capsys
+):
+    # A lone atom in package.accept_keywords accepts ~ARCH (validated against
+    # real portage in docs/gentoo-validation.md §10); show must say so rather
+    # than claiming "(none)".
+    keyword_file.parent.mkdir()
+    keyword_file.write_text(f"{ATOM}\n")
+
+    assert run(backend, "--json", ATOM) == 0
+    assert json.loads(capsys.readouterr().out)["managed"] == ["~amd64"]
+
+
+def test_testing_on_a_bare_managed_entry_changes_nothing(backend, config_root, keyword_file):
+    keyword_file.parent.mkdir()
+    keyword_file.write_text(f"{ATOM}\n")
+
+    assert run(backend, "--testing", ATOM) == 0
+    assert keyword_file.read_text() == f"{ATOM}\n"
+
+
+def test_new_keyword_on_a_bare_managed_entry_keeps_the_implicit_arch(
+    backend, config_root, keyword_file
+):
+    keyword_file.parent.mkdir()
+    keyword_file.write_text(f"{ATOM}\n")
+
+    assert run(backend, ATOM, "-*") == 0
+    assert keyword_file.read_text() == f"{ATOM} ~amd64 -*\n"
+
+
+def test_unset_arch_removes_a_bare_managed_entry(backend, config_root, keyword_file):
+    keyword_file.parent.mkdir()
+    keyword_file.write_text(f"{ATOM}\n")
+
+    assert run(backend, "--unset", ATOM, "~amd64") == 0
+    assert not keyword_file.read_text()
+
+
 def test_dry_run_writes_nothing(backend, config_root, keyword_file, capsys):
     assert run(backend, "--dry-run", "--testing", ATOM) == 0
 
