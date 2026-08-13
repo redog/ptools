@@ -157,40 +157,60 @@ Because it's a PEP 517 / hatchling project, the ebuild is a clean
 `distutils-r1` one — `distutils_enable_tests` wires the suite straight into
 `src_test`.
 
-### 6a. Local overlay (one time)
+**The ebuild ships in this repo** as a ready-to-use overlay:
+
+```
+overlay/
+  metadata/layout.conf                    # masters = gentoo
+  profiles/repo_name                      # ptools-overlay
+  app-portage/ptools/ptools-9999.ebuild   # the live ebuild
+  app-portage/ptools/metadata.xml
+```
+
+### 6a. Register the overlay (one time)
+
+Either point portage straight at the checkout:
 
 ```bash
-sudo mkdir -p /var/db/repos/localrepo/{metadata,profiles}
-echo localrepo | sudo tee /var/db/repos/localrepo/profiles/repo_name
-printf 'masters = gentoo\n' | sudo tee /var/db/repos/localrepo/metadata/layout.conf
-sudo mkdir -p /etc/portage/repos.conf
-sudo tee /etc/portage/repos.conf/localrepo.conf >/dev/null <<'EOF'
-[localrepo]
-location = /var/db/repos/localrepo
+sudo tee /etc/portage/repos.conf/ptools-overlay.conf >/dev/null <<'EOF'
+[ptools-overlay]
+location = /path/to/your/ptools/checkout/overlay
 EOF
 ```
 
-### 6b. A live (`-9999`) ebuild for iteration
-
-Save as `/var/db/repos/localrepo/app-portage/ptools/ptools-9999.ebuild`:
+or copy it somewhere portage-owned (then keep it in sync yourself):
 
 ```bash
-# Copyright 1999-2026 Gentoo Authors
-# Distributed under the terms of the GNU General Public License v2
+sudo cp -r overlay /var/db/repos/ptools-overlay
+sudo tee /etc/portage/repos.conf/ptools-overlay.conf >/dev/null <<'EOF'
+[ptools-overlay]
+location = /var/db/repos/ptools-overlay
+EOF
+```
+
+### 6b. The live (`-9999`) ebuild
+
+This is `overlay/app-portage/ptools/ptools-9999.ebuild`, verbatim:
+
+```bash
+# Copyright 2004-2026 redog
+# Distributed under the terms of the GNU General Public License v3
 
 EAPI=8
 
 DISTUTILS_USE_PEP517=hatchling
-PYTHON_COMPAT=( python3_{11..13} )
+# 3.14 is what the validation host runs (docs/environment.md); 3.11 is the
+# floor from pyproject's requires-python.
+PYTHON_COMPAT=( python3_{11..14} )
 inherit distutils-r1 git-r3
 
 DESCRIPTION="Gentoo Portage configuration tools (USE flags and keywords)"
 HOMEPAGE="https://github.com/redog/ptools"
 EGIT_REPO_URI="https://github.com/redog/ptools.git"
 
-LICENSE="GPL-2"
+LICENSE="GPL-3"
 SLOT="0"
-KEYWORDS=""   # live ebuild: unmask to install (see below)
+KEYWORDS=""   # live ebuild: unmask to install (see docs/build-and-test.md §6c)
 
 # Runtime: the real backend imports the portage python API, so match portage's
 # interpreter.
@@ -199,20 +219,27 @@ RDEPEND="sys-apps/portage[${PYTHON_USEDEP}]"
 distutils_enable_tests pytest
 
 python_test() {
-	# upstream bakes a --cov-fail-under gate into pyproject; drop it for the
-	# ebuild so a coverage threshold can't fail the package build.
-	epytest --no-cov
+	# pyproject bakes a coverage gate into pytest addopts; clear addopts so
+	# the ebuild needs no pytest-cov and a coverage threshold cannot fail
+	# the package build. The integration tests run too — on a Gentoo build
+	# host they exercise the real portage backend read-only and write only
+	# under PTOOLS_CONFIG_ROOT sandboxes.
+	epytest -o addopts=
 }
 ```
 
-If `dev-python/pytest-cov` isn't pulled in and `epytest` complains about the
-`--cov` addopts, either add `test? ( dev-python/pytest-cov )` to `BDEPEND` or
-keep the `--no-cov` override above.
+Three corrections against the earlier draft of this section: `LICENSE` is
+**GPL-3** (matching the repo's `LICENSE` file, which is the GPLv3 text — the
+old draft said GPL-2); `PYTHON_COMPAT` reaches **python3_14** (the validation
+host runs 3.14.6, which the old `{11..13}` range would have refused); and the
+test override clears `addopts` instead of passing `--no-cov`, because
+`--no-cov` is itself a pytest-cov option and fails in exactly the
+no-pytest-cov case it was meant to handle.
 
 ### 6c. Build, test, install, verify
 
 ```bash
-cd /var/db/repos/localrepo/app-portage/ptools
+cd <overlay-location>/app-portage/ptools   # wherever §6a registered it
 
 # run through phases (compiles + runs the test suite in src_test):
 sudo ebuild ptools-9999.ebuild clean test install

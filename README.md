@@ -58,7 +58,9 @@ pip install .
 python -m build && pip install dist/ptools-0.1.0-py3-none-any.whl
 ```
 
-An ebuild for a local overlay is written out in `docs/build-and-test.md` §6.
+A live ebuild ships in this repo as a ready-to-use overlay (`overlay/`, package
+`app-portage/ptools`); registering and using it is walked through in
+`docs/build-and-test.md` §6.
 
 ## Read-only examples
 

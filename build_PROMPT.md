@@ -400,6 +400,22 @@ F. DONE (2026-08-13 - gumbo runner registered and run #10 attempt 2 green,
    Done when: ruff check + format check pass; mypy passes; pytest >=85%; all
      integration tests pass on gumbo; wheel + sdist build; twine check passes.
    (Ebuild work — see docs/build-and-test.md — is a SEPARATE step after F.)
+
+G. IN PROGRESS - Ebuild (started 2026-08-13, after F closed):
+   What: ship the live ebuild in-tree as a ready-to-use overlay (overlay/:
+     repo_name ptools-overlay, layout.conf, app-portage/ptools-9999.ebuild +
+     metadata.xml), correcting three defects in the docs draft - LICENSE is
+     GPL-3 not GPL-2 (the repo LICENSE file is the GPLv3 text), PYTHON_COMPAT
+     reaches python3_14 (validation host runs 3.14.6; {11..13} would refuse
+     it), and python_test clears addopts instead of passing --no-cov (--no-cov
+     is itself a pytest-cov option, so it fails in exactly the no-pytest-cov
+     case it was meant to handle). pyproject now also declares
+     license = { file = "LICENSE" } so the wheel metadata matches.
+   Done when: `ebuild ptools-9999.ebuild clean test install` passes on a real
+     Gentoo host (needs root + portage - NOT runnable from the liminal/cloud
+     dev container; run it on gumbo or in the stage3 chroot per docs §6c) and
+     puse/pkw work from the merged package. Until then the ebuild is
+     syntax-checked (bash -n) and structurally complete, no more.
 ```
 
 ---
