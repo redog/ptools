@@ -414,8 +414,19 @@ G. IN PROGRESS - Ebuild (started 2026-08-13, after F closed):
    Done when: `ebuild ptools-9999.ebuild clean test install` passes on a real
      Gentoo host (needs root + portage - NOT runnable from the liminal/cloud
      dev container; run it on gumbo or in the stage3 chroot per docs §6c) and
-     puse/pkw work from the merged package. Until then the ebuild is
-     syntax-checked (bash -n) and structurally complete, no more.
+     puse/pkw work from the merged package.
+   PROGRESS (2026-08-13, user-run on the gumbo console): `sudo ebuild
+     ptools/ptools-9999.ebuild clean test install` completed - ">>> Completed
+     installing app-portage/ptools-9999 into /var/tmp/portage/app-portage/
+     ptools-9999/image" - against the merged code (the user checked out this
+     branch before running, and it is merged as main 28fdfaa). src_test ran
+     the full suite, so the ebuild's build+test leg is validated on real
+     Gentoo. STILL REMAINING to close G: merge onto the live filesystem
+     (`ebuild ... qmerge`, or register the overlay in repos.conf + accept
+     `=app-portage/ptools-9999 **` in a NON-ptools keywords file + emerge)
+     and confirm `puse --help` / `pkw --help` work from the merged package.
+     Note eix/emerge only see the package once the overlay is in repos.conf -
+     `ebuild(1)` alone never registers it.
 ```
 
 ---
