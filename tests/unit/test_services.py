@@ -48,6 +48,7 @@ def test_apply_use_set(mutations, use_file):
         "removed": [],
         "changed": True,
         "dry_run": False,
+        "also_in": [],
     }
     assert use_file.read_text() == "app-editors/neovim lua -python\n"
 

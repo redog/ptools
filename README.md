@@ -128,7 +128,7 @@ PTOOLS_CONFIG_ROOT=/tmp/sandbox-portage puse app-editors/neovim lua
 
 ## Configuration target policy
 
-| Concern | Target |
+| Concern | Default target for new entries |
 |---|---|
 | USE flags | `<config-root>/package.use/ptools` |
 | Keywords | `<config-root>/package.accept_keywords/ptools` |
@@ -136,6 +136,28 @@ PTOOLS_CONFIG_ROOT=/tmp/sandbox-portage puse app-editors/neovim lua
 The file is named `ptools` as a marker for "managed by this tool set". The
 config root is discovered from portage (`PORTAGE_CONFIGROOT`), or overridden
 by `PTOOLS_CONFIG_ROOT`.
+
+Both directories usually hold more than one file (a `default`, a `99-local`,
+per-package files, …), and portage reads them all — so ptools does too:
+
+- **Shows read every file.** The `managed` lines report the atom's entries in
+  every file of the directory, attributed per file, in portage's sorted read
+  order. `--json` carries them as `entries` plus the stacked effective value
+  as `managed`.
+- **Writes follow the atom.** If exactly one file already holds an entry for
+  the atom, that file is edited in place. If several do, the mutation exits 4
+  and lists them — pass `--file NAME` to pick one. A brand-new atom goes to
+  the default target above, unless `ptools.conf` names another file.
+- **`<config-root>/ptools.conf`** (optional) sets the default file for new
+  entries per concern — `[use]` and `[keywords]` sections, `default-file`
+  key each. `--init` discovers your layout and writes it for you: it picks a
+  file named `default` if you have one, the directory's single file if there
+  is only one, and falls back to `ptools` rather than guessing.
+
+```bash
+pkw --file 99-local app-editors/neovim '~amd64'   # aim at a specific file
+puse --init                                       # write <config-root>/ptools.conf
+```
 
 - **Preservation.** Comments, blank lines, unrelated atoms, and lines ptools
   does not understand survive byte-for-byte. Whole files are never rewritten.
@@ -187,8 +209,12 @@ puse --json app-editors/neovim lua
 ```json
 { "operation": "use.set", "atom": "app-editors/neovim",
   "target": "/etc/portage/package.use/ptools",
-  "added": ["lua"], "removed": [], "changed": true, "dry_run": false }
+  "added": ["lua"], "removed": [], "changed": true, "dry_run": false,
+  "also_in": [] }
 ```
+
+(`also_in` lists other files that also carry entries for the atom when
+`--file` steered the write past them.)
 
 A non-zero exit is accompanied by a JSON error object on **stderr**:
 

@@ -27,6 +27,13 @@ class AmbiguousPackageError(PtoolsError):
     kind = "ambiguous"
 
 
+class AmbiguousTargetError(PtoolsError):
+    """The atom has entries in more than one file; --file must pick one."""
+
+    exit_code = 4
+    kind = "ambiguous"
+
+
 class PermissionDeniedError(PtoolsError):
     """The target is not writable; the caller must re-run as root."""
 

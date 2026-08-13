@@ -205,6 +205,15 @@ Interface Style: flat and terse, unix-like (`puse [opts] PACKAGE [tokens...]`).
 Managed USE Target: /etc/portage/package.use/ptools           (directory layout)
 Managed Keyword Target: /etc/portage/package.accept_keywords/ptools (directory layout)
   (the file is named `ptools` as a marker for "managed by this tool set".)
+  RESOLVED (2026-08-13, Milestone H, user decisions): these are the DEFAULT
+  targets for NEW atoms only. The user often keeps entries in other files
+  (`default`, `99-stuff`, per-atom names), so: (1) writes FOLLOW THE ATOM -
+  the single file already holding it is edited in place, several holders is
+  exit 4 unless --file picks one; (2) the ptools configuration lives in
+  <config-root>/ptools.conf (not ~/.config - it describes the system's portage
+  config and must be the same file under sudo), sections [use]/[keywords],
+  key default-file, written by --init; (3) puse and pkw got the identical
+  treatment in the same milestone.
 Backups: none by default (no .bak). Safety comes from preservation + atomic writes.
 Privilege Policy: the tool performs NO privilege escalation. The user runs it as
   root / via sudo when writing. If the target is not writable, exit 5 (Permission)
@@ -262,10 +271,24 @@ RESOLVED (2026-08-13, user decision: option b): bare atom in the managed
 
 # 4. Command Surface (target contract)
 
-Global options (both commands): `[--exact] [--dry-run] [--json] [--quiet] [--no-color]`
+Global options (both commands): `[--exact] [--dry-run] [--json] [--quiet]
+[--no-color] [--file NAME] [--init]`
 - `--exact` targets `=cat/pkg-ver`; default targets `cat/pkg` (package-wide).
 - `--dry-run` computes and prints the plan but writes nothing (target bytes unchanged).
 - `--json` emits a single JSON object on stdout (no ANSI, ever).
+- `--file NAME` aims a mutation at a specific file inside the directory
+  (mutations only; plain filename, no path, no leading dot).
+- `--init` discovers the layout and writes `<config-root>/ptools.conf`
+  (refuses if it exists; honours --dry-run).
+
+Multi-file semantics (Milestone H): shows read EVERY file in the directory
+(sorted, dotfiles and subdirectories skipped) and attribute entries per file;
+JSON carries `entries` [{file, values}] plus the portage-stacked `managed`.
+Mutations FOLLOW THE ATOM: exactly one file holds it -> edit that file in
+place; several -> exit 4 listing them (use --file); none -> the default-file
+from ptools.conf ([use]/[keywords] sections), falling back to `ptools`.
+Mutation payloads carry `also_in` (other files with entries) when --file
+steered past them.
 
 ```bash
 # puse — per-package USE flags (+ inspection)
@@ -429,6 +452,29 @@ G. DONE (2026-08-13) - Ebuild (started after F closed):
           [1] "ptools-overlay" /home/eric/src/ptools/overlay
      With G closed, every roadmap milestone (A-G) is DONE. Per the hard
      constraints there is no release/PyPI step - the project is complete.
+
+H. DONE (2026-08-13) - Multi-file management (the "more robust" iteration):
+   What: stop pretending the managed file is the only file. Shows read every
+     file in package.use/ and package.accept_keywords/ (sorted read order,
+     per-file attribution, JSON `entries` + stacked `managed`); mutations
+     follow the atom (single holder edited in place, several -> exit 4 via
+     the new AmbiguousTargetError unless --file NAME chooses, new atoms ->
+     the default-file from <config-root>/ptools.conf, falling back to
+     `ptools`); --init discovers the layout and writes ptools.conf (prefers
+     a file named `default`, then a directory's only file, else `ptools`;
+     refuses to overwrite; honours --dry-run). Store grew scan_entries +
+     stack_values; services grew resolve_target/default_file/InitService;
+     both CLIs grew --file/--init (PACKAGE now optional for --init only).
+   Decisions (user, 2026-08-13): follow-the-atom over always-default-target;
+     config in <config-root>/ptools.conf over ~/.config (same file under
+     sudo, carried by PTOOLS_CONFIG_ROOT sandboxing); puse and pkw together.
+   Done when: unit tests cover scan order, dotfile/subdir skipping, per-file
+     implicit ~ARCH, stacking, follow-the-atom, ambiguity, --file (incl.
+     validation and = form), ptools.conf (valid, invalid name, unparsable),
+     and --init (discovery preferences, dry-run, refusal, usage errors) -
+     all green with ruff/mypy/coverage gates and the gumbo CI leg.
+   Known limitation: nested subdirectories inside package.use/ or
+     package.accept_keywords/ are skipped, not recursed into.
 ```
 
 ---
