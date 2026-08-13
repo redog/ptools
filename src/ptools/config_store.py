@@ -66,6 +66,18 @@ def apply_set(values: tuple[str, ...], tokens: tuple[str, ...]) -> tuple[str, ..
     return tuple(result)
 
 
+def stack_values(entries: list[tuple[str, tuple[str, ...]]]) -> tuple[str, ...]:
+    """Fold per-file values in read order into the portage-effective result.
+
+    Later files win a ``flag`` vs ``-flag`` contradiction, exactly as portage
+    stacks package.use; for keywords the fold is a plain ordered union.
+    """
+    effective: tuple[str, ...] = ()
+    for _, values in entries:
+        effective = apply_set(effective, values)
+    return effective
+
+
 def apply_unset(values: tuple[str, ...], tokens: tuple[str, ...]) -> tuple[str, ...]:
     """Drop both the plain and the negated form of each token."""
     drop = set()
@@ -107,6 +119,26 @@ class ConfigStore:
         for index in self._select(lines, atom, file_path):
             values.extend(lines[index].values or implicit)
         return tuple(dict.fromkeys(values))
+
+    def scan_entries(
+        self, directory: Path, atom: str, implicit: tuple[str, ...] = ()
+    ) -> list[tuple[str, tuple[str, ...]]]:
+        """``(filename, values)`` for every file in ``directory`` mentioning ``atom``.
+
+        Files are visited in sorted name order — the order portage reads them.
+        Dotfiles and subdirectories are skipped. A file whose entry carries no
+        values (after ``implicit``) is treated as having no entry at all.
+        """
+        if not directory.is_dir():
+            return []
+        entries: list[tuple[str, tuple[str, ...]]] = []
+        for path in sorted(directory.iterdir()):
+            if path.name.startswith(".") or not path.is_file():
+                continue
+            values = self.read_values(path, atom, implicit)
+            if values:
+                entries.append((path.name, values))
+        return entries
 
     def _select(self, lines: list[ParsedLine], atom: str, file_path: Path) -> list[int]:
         indexes = [i for i, line in enumerate(lines) if line.atom == atom]

@@ -93,6 +93,7 @@ def test_dry_run_json_reports_the_plan(backend, config_root, use_file, capsys):
         "removed": [],
         "changed": True,
         "dry_run": True,
+        "also_in": [],
     }
 
 

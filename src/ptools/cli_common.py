@@ -29,9 +29,14 @@ GLOBAL_OPTIONS = frozenset(
         "--no-color",
         "--unset",
         "--merge-duplicates",
+        "--file",
+        "--init",
         "--help",
     }
 )
+
+#: Options that consume the following argument as their value.
+VALUE_OPTIONS = frozenset({"--file"})
 
 USE_FLAG_RE = re.compile(r"^-?[A-Za-z0-9][A-Za-z0-9+_@-]*$")
 KEYWORD_RE = re.compile(r"^(\*\*|-?\*|[-~]?[A-Za-z0-9][A-Za-z0-9+_.-]*)$")
@@ -54,6 +59,17 @@ def add_global_options(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="combine duplicate entries for the atom instead of failing",
     )
+    parser.add_argument(
+        "--file",
+        metavar="NAME",
+        default=None,
+        help="write to this file inside the target directory instead of the resolved one",
+    )
+    parser.add_argument(
+        "--init",
+        action="store_true",
+        help="discover the config layout and write <config-root>/ptools.conf",
+    )
     parser.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
     parser.add_argument("--json", action="store_true", help="emit a single JSON object on stdout")
     parser.add_argument("--quiet", action="store_true", help="suppress human-readable output")
@@ -69,19 +85,28 @@ def partition_argv(argv: Sequence[str], options: frozenset[str]) -> tuple[list[s
     found: list[str] = []
     operands: list[str] = []
     end_of_options = False
+    expects_value: str | None = None
     for arg in argv:
         if end_of_options:
             operands.append(arg)
+        elif expects_value is not None:
+            found.append(arg)
+            expects_value = None
         elif arg == "--":
             end_of_options = True
         elif arg in ("-h", "--help"):
             found.append("--help")
         elif arg.startswith("--"):
-            if arg.split("=", 1)[0] not in options:
+            name = arg.split("=", 1)[0]
+            if name not in options:
                 raise UsageError(f"unrecognized option: {arg}")
             found.append(arg)
+            if name in VALUE_OPTIONS and "=" not in arg:
+                expects_value = name
         else:
             operands.append(arg)
+    if expects_value is not None:
+        raise UsageError(f"option {expects_value} requires a value")
     return found, operands
 
 
@@ -143,15 +168,45 @@ def render_mutation(out: Output, payload: dict[str, Any]) -> str:
     prefix = out.paint("[dry-run] ", "yellow") if payload["dry_run"] else ""
     atom = out.paint(payload["atom"], "bold")
     if not payload["changed"]:
-        return f"{prefix}{atom}: no change"
-    parts = [out.paint(f"+{value}", "green") for value in payload["added"]]
-    parts += [out.paint(f"-{value}", "red") for value in payload["removed"]]
-    return f"{prefix}{atom}: {' '.join(parts)} -> {payload['target']}"
+        line = f"{prefix}{atom}: no change"
+    else:
+        parts = [out.paint(f"+{value}", "green") for value in payload["added"]]
+        parts += [out.paint(f"-{value}", "red") for value in payload["removed"]]
+        line = f"{prefix}{atom}: {' '.join(parts)} -> {payload['target']}"
+    if payload.get("also_in"):
+        note = f"note: entries for this atom also exist in: {', '.join(payload['also_in'])}"
+        line = f"{line}\n{out.paint(f'  {note}', 'yellow')}"
+    return line
 
 
 def render_field(out: Output, label: str, values: Sequence[str] | str, empty: str = "-") -> str:
     text = " ".join(values) if not isinstance(values, str) else values
     return f"  {out.paint(f'{label}:', 'dim'):<24}{text or empty}"
+
+
+def render_managed_state(out: Output, payload: dict[str, Any]) -> list[str]:
+    """The ``managed``/``target`` lines of a show, one line per file with entries."""
+    lines = []
+    if payload["entries"]:
+        for entry in payload["entries"]:
+            lines.append(render_field(out, f"managed [{entry['file']}]", entry["values"]))
+    else:
+        lines.append(render_field(out, "managed", [], empty="(none)"))
+    lines.append(
+        render_field(out, "target", payload["target"] or "(ambiguous - pass --file to choose)")
+    )
+    return lines
+
+
+def render_init(out: Output, payload: dict[str, Any]) -> str:
+    prefix = out.paint("[dry-run] ", "yellow") if payload["dry_run"] else ""
+    return "\n".join(
+        [
+            f"{prefix}{out.paint(payload['target'], 'bold')}",
+            render_field(out, "use default-file", payload["use_default"]),
+            render_field(out, "keywords default-file", payload["keywords_default"]),
+        ]
+    )
 
 
 def dispatch(
