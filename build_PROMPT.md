@@ -401,7 +401,7 @@ F. DONE (2026-08-13 - gumbo runner registered and run #10 attempt 2 green,
      integration tests pass on gumbo; wheel + sdist build; twine check passes.
    (Ebuild work — see docs/build-and-test.md — is a SEPARATE step after F.)
 
-G. IN PROGRESS - Ebuild (started 2026-08-13, after F closed):
+G. DONE (2026-08-13) - Ebuild (started after F closed):
    What: ship the live ebuild in-tree as a ready-to-use overlay (overlay/:
      repo_name ptools-overlay, layout.conf, app-portage/ptools-9999.ebuild +
      metadata.xml), correcting three defects in the docs draft - LICENSE is
@@ -415,18 +415,20 @@ G. IN PROGRESS - Ebuild (started 2026-08-13, after F closed):
      Gentoo host (needs root + portage - NOT runnable from the liminal/cloud
      dev container; run it on gumbo or in the stage3 chroot per docs §6c) and
      puse/pkw work from the merged package.
-   PROGRESS (2026-08-13, user-run on the gumbo console): `sudo ebuild
-     ptools/ptools-9999.ebuild clean test install` completed - ">>> Completed
-     installing app-portage/ptools-9999 into /var/tmp/portage/app-portage/
-     ptools-9999/image" - against the merged code (the user checked out this
-     branch before running, and it is merged as main 28fdfaa). src_test ran
-     the full suite, so the ebuild's build+test leg is validated on real
-     Gentoo. STILL REMAINING to close G: merge onto the live filesystem
-     (`ebuild ... qmerge`, or register the overlay in repos.conf + accept
-     `=app-portage/ptools-9999 **` in a NON-ptools keywords file + emerge)
-     and confirm `puse --help` / `pkw --help` work from the merged package.
-     Note eix/emerge only see the package once the overlay is in repos.conf -
-     `ebuild(1)` alone never registers it.
+   EVIDENCE (2026-08-13, user-run on the gumbo console, against the merged
+     code - main 28fdfaa):
+     1. `sudo ebuild ptools/ptools-9999.ebuild clean test install` completed:
+        ">>> Completed installing app-portage/ptools-9999 into /var/tmp/
+        portage/app-portage/ptools-9999/image", with src_test running the
+        full suite - the build+test leg on real Gentoo.
+     2. The overlay was registered in repos.conf from the checkout and the
+        package merged onto the live filesystem; `puse --help && pkw --help`
+        both answer from the merged package, and eix reports:
+          [I] app-portage/ptools ... Installed versions: 9999*l^t
+          (PYTHON_TARGETS="python3_14 ...")
+          [1] "ptools-overlay" /home/eric/src/ptools/overlay
+     With G closed, every roadmap milestone (A-G) is DONE. Per the hard
+     constraints there is no release/PyPI step - the project is complete.
 ```
 
 ---
