@@ -355,6 +355,12 @@ DRY_RUN_OUTPUT:
 > folded into the bare-`PACKAGE` form. There is no `ptools` executable, no
 > subcommand groups, and no `--interactive` mode. Ambiguity exits **4**, not 2.
 > The `ptools ...` invocations below are kept only as a record of the proposal.
+>
+> **Amended 2026-08-13 (Milestone I):** the legacy selection menu returned by
+> user request — an ambiguous name offers its candidates as a numbered menu
+> when stdin and stderr are both TTYs (no flag; TTY detection is the switch).
+> Scripted, piped, `--json`, and `--quiet` invocations still exit 4
+> deterministically, so "Scripted operation must remain deterministic" holds.
 
 Provide one primary executable.
 

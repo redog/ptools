@@ -202,6 +202,13 @@ Command Surface: two first-class commands, `puse` and `pkw`. `ptools` is the
 Package Inspection: folded into puse/pkw as the default "show" form — no separate
   `package` command.
 Interface Style: flat and terse, unix-like (`puse [opts] PACKAGE [tokens...]`).
+Ambiguous names: REVERSED (2026-08-13, user request, Milestone I). The
+  original "no interactive mode" resolution is superseded: the legacy tools'
+  selection menu is back. An ambiguous unqualified name offers its candidates
+  as a numbered menu on stderr ONLY when stdin and stderr are both TTYs and
+  neither --json nor --quiet is set; every scripted/piped/machine invocation
+  still fails deterministically with exit 4. There is no --interactive flag -
+  TTY detection is the switch, so scripts never need to opt out.
 Managed USE Target: /etc/portage/package.use/ptools           (directory layout)
 Managed Keyword Target: /etc/portage/package.accept_keywords/ptools (directory layout)
   (the file is named `ptools` as a marker for "managed by this tool set".)
@@ -308,7 +315,7 @@ Package Inputs:
   Category Qualified: app-editors/neovim
   Exact:              =app-editors/neovim-0.10.4
   Version Matched:    ~app-editors/neovim-0.10.4
-  Unqualified:        neovim   # may be ambiguous -> exit 4
+  Unqualified:        neovim   # ambiguous -> menu on a TTY, else exit 4
 Configuration Format: whitespace-delimited atom + tokens; comments, blank lines,
   and unrelated entries are PRESERVED byte-for-byte.
 Duplicate Atom: fail by default; opt-in merge via --merge-duplicates only.
@@ -475,6 +482,33 @@ H. DONE (2026-08-13) - Multi-file management (the "more robust" iteration):
      all green with ruff/mypy/coverage gates and the gumbo CI leg.
    Known limitation: nested subdirectories inside package.use/ or
      package.accept_keywords/ are skipped, not recursed into.
+
+I. DONE (2026-08-13) - Legacy ambiguity menu + full package visibility:
+   What (both from user requests after using H on the real system):
+   1. The Python 2 tools' ambiguous-name selection menu is reinstated:
+      AmbiguousPackageError now carries its candidate cps, and dispatch offers
+      them as a numbered menu on stderr, retrying with the choice. TTY-gated
+      (stdin AND stderr TTYs, no --json/--quiet) so scripted operation stays
+      deterministic at exit 4; aborting the menu (blank, q, EOF, junk, out of
+      range) falls back to the same exit 4. No --interactive flag.
+   2. Shows report every entry portage sees for the package, not just the
+      exact managed atom: the backend grew atom_cp() (portage.dep.Atom in the
+      real backend - never hand parsing; wildcard/repo atoms tolerated), the
+      store grew scan_package_entries(matcher), and show `entries` now list
+      each line whose atom refers to the package's cp - exact, versioned,
+      slotted forms - as {file, atom, values} with the atom as written
+      (rendered as `managed [file] =cat/pkg-1.0:`). `managed`/`target` still
+      track only the precise atom a mutation would edit, so mutation
+      semantics are unchanged; to act on a versioned entry, pass it exactly
+      (`puse --exact '=cat/pkg-1.0' --unset flag`).
+   Known limitation: wildcard entries (cat/*, */*) are read by portage but
+     never attributed to a package by atom_cp equality, so they do not appear
+     in show output (recorded in README Known limitations).
+   Done when: unit tests cover the menu (choice, every abort form, JSON/quiet
+     /non-TTY gating, end-to-end retry through both CLIs) and the visibility
+     (exact+slotted listing, other-package/wildcard exclusion, --exact seeing
+     package-wide entries, bare exact keyword entries, mock atom_cp) - all
+     green with the standard gates and the gumbo CI leg.
 ```
 
 ---

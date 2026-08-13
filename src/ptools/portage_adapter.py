@@ -15,6 +15,8 @@ from ptools.errors import AmbiguousPackageError, PackageNotFoundError, PortageIn
 class PortageBackend(Protocol):
     def resolve(self, request: str) -> ResolvedPackage: ...
 
+    def atom_cp(self, atom: str) -> str | None: ...
+
     def effective_use(self, atom: str) -> tuple[str, ...]: ...
 
     def installed_use(self, atom: str) -> tuple[str, ...]: ...
@@ -65,7 +67,8 @@ class MockPortageBackend:
             raise PackageNotFoundError(f"package not found: {request}")
         if len(matches) > 1:
             raise AmbiguousPackageError(
-                f"ambiguous package name: {request} (matches {', '.join(sorted(matches))})"
+                f"ambiguous package name: {request} (matches {', '.join(sorted(matches))})",
+                matches=tuple(sorted(matches)),
             )
 
         cp = matches[0]
@@ -92,6 +95,12 @@ class MockPortageBackend:
             installed_versions=tuple(f"{cp}-{v}" for v in installed_versions),
             repository_versions=tuple(f"{cp}-{v}" for v in repo_versions),
         )
+
+    def atom_cp(self, atom: str) -> str | None:
+        """The cp a config-file atom refers to, or None if unparsable."""
+        base = atom.split(":", 1)[0].split("::", 1)[0]
+        name, _version = self._split_request(base)
+        return name if "/" in name else None
 
     def _field(self, atom: str, key: str) -> tuple[str, ...]:
         resolved = self.resolve(atom)

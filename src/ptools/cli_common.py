@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NoReturn
 
-from ptools.errors import PtoolsError, UsageError
+from ptools.errors import AmbiguousPackageError, PtoolsError, UsageError
 from ptools.portage_adapter import PortageBackend, get_portage_backend
 
 #: Options understood by both commands. Anything else starting with ``--`` is a
@@ -185,11 +185,18 @@ def render_field(out: Output, label: str, values: Sequence[str] | str, empty: st
 
 
 def render_managed_state(out: Output, payload: dict[str, Any]) -> list[str]:
-    """The ``managed``/``target`` lines of a show, one line per file with entries."""
+    """The ``managed``/``target`` lines of a show, one line per entry.
+
+    An entry whose atom differs from the one a mutation would target (an exact
+    or slotted form of the same package) shows that atom after the filename.
+    """
     lines = []
     if payload["entries"]:
         for entry in payload["entries"]:
-            lines.append(render_field(out, f"managed [{entry['file']}]", entry["values"]))
+            label = f"managed [{entry['file']}]"
+            if entry["atom"] != payload["atom"]:
+                label = f"{label} {entry['atom']}"
+            lines.append(render_field(out, label, entry["values"]))
     else:
         lines.append(render_field(out, "managed", [], empty="(none)"))
     lines.append(
@@ -207,6 +214,33 @@ def render_init(out: Output, payload: dict[str, Any]) -> str:
             render_field(out, "keywords default-file", payload["keywords_default"]),
         ]
     )
+
+
+def can_prompt(args: argparse.Namespace) -> bool:
+    """Whether an interactive menu is allowed: a human on both ends, and no
+    machine-readable or quiet output that a prompt would corrupt. Scripted
+    invocations therefore stay deterministic and still exit 4."""
+    return bool(sys.stdin.isatty() and sys.stderr.isatty() and not args.json and not args.quiet)
+
+
+def select_match(matches: tuple[str, ...]) -> str | None:
+    """Offer the candidate packages as a numbered menu on stderr.
+
+    Returns the chosen cp, or None on anything other than a valid number
+    (blank line, q, EOF, out of range) — the caller then fails as usual.
+    """
+    print("ambiguous package name - candidates:", file=sys.stderr)
+    for index, match in enumerate(matches, start=1):
+        print(f"  {index}) {match}", file=sys.stderr)
+    print(f"select 1-{len(matches)} (anything else aborts): ", end="", file=sys.stderr, flush=True)
+    line = sys.stdin.readline()
+    try:
+        choice = int(line.strip())
+    except ValueError:
+        return None
+    if 1 <= choice <= len(matches):
+        return matches[choice - 1]
+    return None
 
 
 def dispatch(
@@ -238,7 +272,18 @@ def dispatch(
         )
         if backend is None:
             backend = get_portage_backend()
-        payload = run(args, backend)
+        try:
+            payload = run(args, backend)
+        except AmbiguousPackageError as exc:
+            # The legacy tools offered ambiguous names as a menu; do the same
+            # when a human is attached, otherwise fail exactly as before.
+            if not (exc.matches and can_prompt(args)):
+                raise
+            choice = select_match(exc.matches)
+            if choice is None:
+                raise
+            args.package = choice
+            payload = run(args, backend)
     except PtoolsError as exc:
         return out.failure(exc, parser.format_usage() if isinstance(exc, UsageError) else None)
     out.result(payload, render)
