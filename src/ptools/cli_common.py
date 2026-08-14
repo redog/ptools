@@ -196,6 +196,23 @@ def render_field(out: Output, label: str, values: Sequence[str] | str, empty: st
     return f"  {out.paint(f'{label}:', 'dim'):<24}{text or empty}"
 
 
+def color_use_flag(out: Output, flag: str, enabled_set: set[str]) -> str:
+    bare = flag.lstrip("+-")
+    if bare in enabled_set:
+        return out.paint(flag, "green")
+    return out.paint(flag, "blue")
+
+
+def color_keyword(out: Output, kw: str) -> str:
+    if kw.startswith("~"):
+        return out.paint(kw, "yellow")
+    if kw.startswith("-"):
+        return out.paint(kw, "red")
+    if kw in ("*", "**", "-*"):
+        return out.paint(kw, "bold")
+    return out.paint(kw, "green")
+
+
 def render_managed_state(out: Output, payload: dict[str, Any]) -> list[str]:
     """The ``managed``/``target`` lines of a show, one line per entry.
 

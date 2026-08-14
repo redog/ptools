@@ -11,6 +11,7 @@ from ptools.cli_common import (
     ArgumentParser,
     Output,
     add_global_options,
+    color_use_flag,
     dispatch,
     render_field,
     render_init,
@@ -104,15 +105,18 @@ def render(out: Output, payload: dict[str, Any]) -> str:
         return render_init(out, payload)
     if payload["operation"] != "use.show":
         return render_mutation(out, payload)
+    effective_set = set(payload["effective"])
     lines = [f"{out.paint(payload['atom'], 'bold')}  ({payload['cpv'] or 'no version'})"]
-    lines.append(render_field(out, "iuse", payload["iuse"]))
-    lines.append(render_field(out, "effective use", payload["effective"]))
+    iuse_colored = " ".join(color_use_flag(out, f, effective_set) for f in payload["iuse"])
+    lines.append(render_field(out, "iuse", iuse_colored or "-"))
+    effective_colored = " ".join(out.paint(f, "green") for f in payload["effective"])
+    lines.append(render_field(out, "effective use", effective_colored or "-"))
+    installed_colored = " ".join(out.paint(f, "darkgreen") for f in payload["installed_use"])
     lines.append(
         render_field(
             out,
             "installed use",
-            payload["installed_use"],
-            empty="(not installed)" if not payload["installed"] else "-",
+            installed_colored or ("(not installed)" if not payload["installed"] else "-"),
         )
     )
     lines.extend(render_managed_state(out, payload))
