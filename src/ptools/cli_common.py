@@ -12,6 +12,7 @@ import re
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from importlib import metadata
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -31,6 +32,7 @@ GLOBAL_OPTIONS = frozenset(
         "--merge-duplicates",
         "--file",
         "--init",
+        "--version",
         "--help",
     }
 )
@@ -70,6 +72,7 @@ def add_global_options(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="discover the config layout and write <config-root>/ptools.conf",
     )
+    parser.add_argument("--version", action="store_true", help="print the ptools version and exit")
     parser.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
     parser.add_argument("--json", action="store_true", help="emit a single JSON object on stdout")
     parser.add_argument("--quiet", action="store_true", help="suppress human-readable output")
@@ -216,6 +219,14 @@ def render_init(out: Output, payload: dict[str, Any]) -> str:
     )
 
 
+def ptools_version() -> str:
+    """The installed distribution version; 'unknown' from an uninstalled tree."""
+    try:
+        return metadata.version("ptools")
+    except metadata.PackageNotFoundError:
+        return "unknown"
+
+
 def can_prompt(args: argparse.Namespace) -> bool:
     """Whether an interactive menu is allowed: a human on both ends, and no
     machine-readable or quiet output that a prompt would corrupt. Scripted
@@ -270,6 +281,11 @@ def dispatch(
             quiet=args.quiet,
             color=color_enabled(args.no_color),
         )
+        if args.version:
+            # Must work without portage: version questions come from exactly
+            # the machines where the backend may be broken or absent.
+            print(f"{prog} (ptools) {ptools_version()}", file=sys.stdout)
+            return 0
         if backend is None:
             backend = get_portage_backend()
         try:

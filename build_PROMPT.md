@@ -17,7 +17,11 @@ Integration/Validation Host: gumbo (Gentoo), reached via the GitHub self-hosted
 Source of Truth: this file + docs/environment.md + docs/legacy-behavior.md
 Version Control: commit and push directly to main per logical unit of work
   (CI on gumbo validates each push); revert via git history if an iteration is bad
-Release: never publish; never upload to PyPI
+Release: AMENDED 2026-08-13 (user decision, after A-I closed): tagging a
+  version on GitHub and shipping the matching tagged ebuild in overlay/ is
+  sanctioned - that is the release channel. Uploading to PyPI remains
+  prohibited. (The original constraint "never publish" guarded the
+  modernization build itself and is kept below for history.)
 ```
 
 ```text
@@ -279,7 +283,7 @@ RESOLVED (2026-08-13, user decision: option b): bare atom in the managed
 # 4. Command Surface (target contract)
 
 Global options (both commands): `[--exact] [--dry-run] [--json] [--quiet]
-[--no-color] [--file NAME] [--init]`
+[--no-color] [--file NAME] [--init] [--version]`
 - `--exact` targets `=cat/pkg-ver`; default targets `cat/pkg` (package-wide).
 - `--dry-run` computes and prints the plan but writes nothing (target bytes unchanged).
 - `--json` emits a single JSON object on stdout (no ANSI, ever).

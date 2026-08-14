@@ -138,3 +138,25 @@ def test_failure_writes_plain_text_to_stderr(capsys):
     err = capsys.readouterr().err
     assert err.splitlines() == ["usage: puse ...", "puse: error: nope"]
     assert not re.search(r"\033", err)
+
+
+def test_version_exits_zero_without_portage(capsys):
+    from ptools import pkw, puse
+
+    # backend=None and no portage on this host: --version must still answer,
+    # because version questions come from exactly the broken machines.
+    assert puse.main(["--version"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("puse (ptools) ")
+
+    assert pkw.main(["--version"]) == 0
+    assert capsys.readouterr().out.startswith("pkw (ptools) ")
+
+
+def test_version_reports_the_installed_distribution(capsys):
+    from importlib import metadata
+
+    from ptools import puse
+
+    assert puse.main(["--version"]) == 0
+    assert metadata.version("ptools") in capsys.readouterr().out
