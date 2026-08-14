@@ -55,7 +55,7 @@ same interpreter portage itself uses; a bare venv without
 pip install .
 
 # or build artifacts first
-python -m build && pip install dist/ptools-0.1.0-py3-none-any.whl
+python -m build && pip install dist/ptools-1.0.0-py3-none-any.whl
 ```
 
 A live ebuild ships in this repo as a ready-to-use overlay (`overlay/`, package
@@ -232,8 +232,9 @@ A non-zero exit is accompanied by a JSON error object on **stderr**:
 
 ## Known limitations
 
-- `--fix-kw` (the legacy invalid-keyword cleanup) is not implemented; it is
-  deferred.
+- `--fix-kw` (the legacy invalid-keyword cleanup) is not implemented and is
+  not coming back: whole-directory cleanup is a job for modern tooling, not
+  for these two commands.
 - Wildcard entries (`app-editors/*`) and nested subdirectories inside
   `package.use/` or `package.accept_keywords/` are honoured by portage but not
   attributed to a package by the show output.
@@ -267,7 +268,7 @@ The old mode switches are gone. The shape is now `puse [OPTIONS] PACKAGE [FLAG .
 | `pkw --change --any PKG` | `pkw --testing PKG` |
 | `pkw --change PKG '~amd64'` | `pkw PKG '~amd64'` |
 | `pkw --remove PKG '~amd64'` | `pkw --unset PKG '~amd64'` |
-| `pkw --fix-kw` | not implemented (deferred) |
+| `pkw --fix-kw` | dropped — see Known limitations |
 
 Two behavioral changes worth knowing: the originals shelled out to `sudo` and
 ptools does not, and ptools writes to `package.accept_keywords/` — it will not

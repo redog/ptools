@@ -11,7 +11,7 @@ and live in git history only. What they did:
 `pkw --change`: Sets keyword for a package.
 `pkw --remove`: Removes a keyword configuration.
 
-DEFERRED: `pkw --fix-kw` - This cleans up invalid keywords, but is deferred in this modernization step.
+DROPPED (previously DEFERRED): `pkw --fix-kw` - This cleaned up invalid keywords. Deferred during the modernization, then dropped permanently on 2026-08-14 by user decision: whole-directory cleanup is a job for modern tooling, not for these commands.
 
 A fourth tool existed and is lost; no behavior is invented for it.
 
