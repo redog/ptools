@@ -43,7 +43,16 @@ VALUE_OPTIONS = frozenset({"--file"})
 USE_FLAG_RE = re.compile(r"^-?[A-Za-z0-9][A-Za-z0-9+_@-]*$")
 KEYWORD_RE = re.compile(r"^(\*\*|-?\*|[-~]?[A-Za-z0-9][A-Za-z0-9+_.-]*)$")
 
-_COLORS = {"bold": "1", "dim": "2", "red": "31", "green": "32", "yellow": "33"}
+_COLORS = {
+    "bold": "1",
+    "dim": "2",
+    "red": "31",
+    "green": "32",
+    "yellow": "33",
+    "blue": "34",
+    "turquoise": "36",
+    "darkgreen": "32",
+}
 
 
 class ArgumentParser(argparse.ArgumentParser):
@@ -234,7 +243,7 @@ def can_prompt(args: argparse.Namespace) -> bool:
     return bool(sys.stdin.isatty() and sys.stderr.isatty() and not args.json and not args.quiet)
 
 
-def select_match(matches: tuple[str, ...]) -> str | None:
+def select_match(matches: tuple[str, ...], out: Output | None = None) -> str | None:
     """Offer the candidate packages as a numbered menu on stderr.
 
     Returns the chosen cp, or None on anything other than a valid number
@@ -242,8 +251,14 @@ def select_match(matches: tuple[str, ...]) -> str | None:
     """
     print("ambiguous package name - candidates:", file=sys.stderr)
     for index, match in enumerate(matches, start=1):
-        print(f"  {index}) {match}", file=sys.stderr)
-    print(f"select 1-{len(matches)} (anything else aborts): ", end="", file=sys.stderr, flush=True)
+        prefix = f"  [{index}]"
+        if out:
+            prefix = out.paint(prefix, "turquoise")
+            match = out.paint(match, "bold")
+        print(f"{prefix} {match}", file=sys.stderr)
+
+    prompt = f"select 1-{len(matches)} (anything else aborts): "
+    print(prompt, end="", file=sys.stderr, flush=True)
     line = sys.stdin.readline()
     try:
         choice = int(line.strip())
@@ -284,7 +299,10 @@ def dispatch(
         if args.version:
             # Must work without portage: version questions come from exactly
             # the machines where the backend may be broken or absent.
-            print(f"{prog} (ptools) {ptools_version()}", file=sys.stdout)
+            print(
+                f"{out.paint(prog, 'turquoise')} (ptools) {out.paint(ptools_version(), 'bold')}",
+                file=sys.stdout,
+            )
             return 0
         if backend is None:
             backend = get_portage_backend()
@@ -295,7 +313,7 @@ def dispatch(
             # when a human is attached, otherwise fail exactly as before.
             if not (exc.matches and can_prompt(args)):
                 raise
-            choice = select_match(exc.matches)
+            choice = select_match(exc.matches, out)
             if choice is None:
                 raise
             args.package = choice

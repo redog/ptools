@@ -147,10 +147,10 @@ def test_version_exits_zero_without_portage(capsys):
     # because version questions come from exactly the broken machines.
     assert puse.main(["--version"]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("puse (ptools) ")
+    assert "puse (ptools) " in re.sub(r"\033\[\d+m", "", out)
 
     assert pkw.main(["--version"]) == 0
-    assert capsys.readouterr().out.startswith("pkw (ptools) ")
+    assert "pkw (ptools) " in re.sub(r"\033\[\d+m", "", capsys.readouterr().out)
 
 
 def test_version_reports_the_installed_distribution(capsys):
@@ -159,4 +159,4 @@ def test_version_reports_the_installed_distribution(capsys):
     from ptools import puse
 
     assert puse.main(["--version"]) == 0
-    assert metadata.version("ptools") in capsys.readouterr().out
+    assert metadata.version("ptools") in re.sub(r"\033\[\d+m", "", capsys.readouterr().out)

@@ -41,8 +41,8 @@ def test_select_match_returns_the_chosen_candidate(monkeypatch, capsys):
 
     assert cli_common.select_match(("app-editors/vim", "app-misc/vim")) == "app-misc/vim"
     err = capsys.readouterr().err
-    assert "1) app-editors/vim" in err
-    assert "2) app-misc/vim" in err
+    assert "[1]" in err and "app-editors/vim" in err
+    assert "[2]" in err and "app-misc/vim" in err
 
 
 @pytest.mark.parametrize("answer", ["", "\n", "q\n", "0\n", "3\n", "nope\n"])
@@ -69,7 +69,7 @@ def test_ambiguous_show_offers_a_menu_and_continues(backend, config_root, intera
     assert puse.main(["vim"], backend=backend) == 0
 
     captured = capsys.readouterr()
-    assert "1) app-editors/vim" in captured.err
+    assert "[1]" in captured.err and "app-editors/vim" in captured.err
     assert "app-editors/vim" in captured.out  # the show ran for the choice
 
 
