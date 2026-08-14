@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ptools"
-version = "0.1.0"
+version = "1.0.0"
 description = "Gentoo Portage configuration tools"
 readme = "README.md"
 license = { file = "LICENSE" }

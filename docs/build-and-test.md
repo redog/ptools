@@ -75,7 +75,7 @@ Standard PEP 517 build — produces an sdist and a wheel in `dist/`:
 
 ```bash
 python -m build
-ls dist/            # ptools-0.1.0.tar.gz  ptools-0.1.0-py3-none-any.whl
+ls dist/            # ptools-1.0.0.tar.gz  ptools-1.0.0-py3-none-any.whl
 ```
 
 Or just install it (editable for dev, regular to smoke-test the entry points):
@@ -83,7 +83,7 @@ Or just install it (editable for dev, regular to smoke-test the entry points):
 ```bash
 pip install -e .        # editable
 # or
-pip install dist/ptools-0.1.0-py3-none-any.whl
+pip install dist/ptools-1.0.0-py3-none-any.whl
 ```
 
 Verified at `3126461` by installing the wheel into a clean venv on a non-Gentoo
@@ -256,7 +256,10 @@ sudo emerge -C app-portage/ptools     # clean uninstall
 
 ### 6d. Tagged-release ebuild
 
-When you tag e.g. `v0.1.0`, swap `git-r3` for a distfile:
+The release ebuild ships in-tree beside the live one:
+`overlay/app-portage/ptools/ptools-1.0.0.ebuild`. It differs from `-9999` in
+exactly the release-shaped ways — `git-r3` swapped for a distfile, and real
+keywords:
 
 ```bash
 SRC_URI="https://github.com/redog/ptools/archive/refs/tags/v${PV}.tar.gz -> ${P}.tar.gz"
@@ -264,7 +267,11 @@ KEYWORDS="~amd64"
 S="${WORKDIR}/${PN}-${PV}"
 ```
 
-then `sudo ebuild ptools-0.1.0.ebuild manifest` and `emerge` as above.
+A `Manifest` for the tag tarball ships beside it. If GitHub ever regenerates
+the tarball (or you cut a new tag), refresh it with
+`sudo ebuild ptools-1.0.0.ebuild manifest`, then `emerge` as above — being
+keyworded `~amd64`, the release version needs only the usual
+`~amd64` accept_keywords entry rather than the live ebuild's `**`.
 
 ---
 

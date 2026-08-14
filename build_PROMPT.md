@@ -17,7 +17,11 @@ Integration/Validation Host: gumbo (Gentoo), reached via the GitHub self-hosted
 Source of Truth: this file + docs/environment.md + docs/legacy-behavior.md
 Version Control: commit and push directly to main per logical unit of work
   (CI on gumbo validates each push); revert via git history if an iteration is bad
-Release: never publish; never upload to PyPI
+Release: AMENDED 2026-08-13 (user decision, after A-I closed): tagging a
+  version on GitHub and shipping the matching tagged ebuild in overlay/ is
+  sanctioned - that is the release channel. Uploading to PyPI remains
+  prohibited. (The original constraint "never publish" guarded the
+  modernization build itself and is kept below for history.)
 ```
 
 ```text
@@ -279,7 +283,7 @@ RESOLVED (2026-08-13, user decision: option b): bare atom in the managed
 # 4. Command Surface (target contract)
 
 Global options (both commands): `[--exact] [--dry-run] [--json] [--quiet]
-[--no-color] [--file NAME] [--init]`
+[--no-color] [--file NAME] [--init] [--version]`
 - `--exact` targets `=cat/pkg-ver`; default targets `cat/pkg` (package-wide).
 - `--dry-run` computes and prints the plan but writes nothing (target bytes unchanged).
 - `--json` emits a single JSON object on stdout (no ANSI, ever).
@@ -367,7 +371,10 @@ Atomic Write:
 ✗ Do not implement custom atom parsing, version comparison, repo visibility,
   USE-mask/force, or package matching — use the supported Portage API.
 ✗ Do not use private Portage APIs when a supported API or stable command exists.
-✗ Do not implement the legacy --fix-kw cleanup in this pass (deferred).
+✗ Do not implement the legacy --fix-kw cleanup - EVER. (Upgraded 2026-08-14
+  from "deferred" to permanent by user decision: whole-directory cleanup is a
+  job for modern tooling, not for puse/pkw. It is baggage from the 2004-2006
+  originals, not a roadmap item.)
 ✗ Do not invent behavior for the lost fourth legacy tool or expand scope.
 ✗ Do not add Click, Typer, Rich, or Pydantic without a demonstrated unmet need.
 ✗ Do not claim Gentoo compatibility from unit tests alone.
@@ -509,6 +516,19 @@ I. DONE (2026-08-13) - Legacy ambiguity menu + full package visibility:
      (exact+slotted listing, other-package/wildcard exclusion, --exact seeing
      package-wide entries, bare exact keyword entries, mock atom_cp) - all
      green with the standard gates and the gumbo CI leg.
+
+J. RELEASE 1.0.0 (2026-08-14, user decision):
+   What: version bumped 0.1.0 -> 1.0.0 (straight to 1.0.0 - the roadmap is
+     complete and the tool is validated on real Gentoo, so 0.x would be false
+     modesty), --version added (SPEC §21's "Version exits 0", works without
+     portage), tag v1.0.0 pushed, and the tagged-release ebuild
+     overlay/app-portage/ptools/ptools-1.0.0.ebuild shipped beside -9999
+     (distfile SRC_URI from the tag, KEYWORDS=~amd64) with a Manifest
+     generated from the actual tag tarball. --fix-kw simultaneously upgraded
+     from deferred to permanently dropped (see §5) - so 1.0.0 has no known
+     unimplemented roadmap behavior, only documented non-goals.
+   Channel: GitHub tag + in-tree overlay. No PyPI, no GitHub Release object
+     required (the tag is the release; add release notes by hand if wanted).
 ```
 
 ---
