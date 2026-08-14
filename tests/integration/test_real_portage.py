@@ -92,8 +92,19 @@ def test_ambiguous_unqualified_name(backend, name_counts):
     if ambiguous is None:
         pytest.skip("no package name exists in two categories in this repository")
 
-    with pytest.raises(AmbiguousPackageError):
+    with pytest.raises(AmbiguousPackageError) as excinfo:
         backend.resolve(ambiguous)
+    # The menu feature needs the candidates as data, not just prose.
+    assert len(excinfo.value.matches) > 1
+    assert all("/" in match for match in excinfo.value.matches)
+
+
+def test_atom_cp_uses_real_portage_parsing(backend):
+    assert backend.atom_cp(ANCHOR) == ANCHOR
+    assert backend.atom_cp(f"={ANCHOR}-3.0.81.2") == ANCHOR
+    assert backend.atom_cp(f"{ANCHOR}:0") == ANCHOR
+    assert backend.atom_cp(f"{ANCHOR}::gentoo") == ANCHOR
+    assert backend.atom_cp("not an atom") is None
 
 
 def test_unqualified_name_resolves_when_unique(backend, all_cp, name_counts):

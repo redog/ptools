@@ -35,7 +35,8 @@ class RealPortageBackend:
             raise PackageNotFoundError(f"package not found: {name}")
         if len(matches) > 1:
             raise AmbiguousPackageError(
-                f"ambiguous package name: {name} (matches {', '.join(matches)})"
+                f"ambiguous package name: {name} (matches {', '.join(matches)})",
+                matches=tuple(matches),
             )
         return str(matches[0])
 
@@ -70,6 +71,18 @@ class RealPortageBackend:
             installed_versions=tuple(installed_matches),
             repository_versions=tuple(repo_matches),
         )
+
+    def atom_cp(self, atom: str) -> str | None:
+        """The cp a config-file atom refers to, or None if unparsable.
+
+        Parsing goes through portage's Atom, never by hand. Wildcard and
+        repo-qualified atoms parse; a wildcard cp simply never equals a real
+        one, so those entries are not attributed to any package.
+        """
+        try:
+            return str(Atom(atom, allow_wildcard=True, allow_repo=True).cp)
+        except InvalidAtom:
+            return None
 
     def _aux(self, db: Any, cpv: str, key: str) -> tuple[str, ...]:
         try:

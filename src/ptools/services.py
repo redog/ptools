@@ -130,24 +130,39 @@ class ReadOnlyService(_Service):
         }
 
     def _managed_state(
-        self, directory: Path, managed_atom: str, implicit: tuple[str, ...], section: str
+        self,
+        directory: Path,
+        managed_atom: str,
+        cp: str,
+        implicit: tuple[str, ...],
+        section: str,
     ) -> dict[str, Any]:
-        """The atom's entries across every file, plus the resolved write target.
+        """Everything portage sees for the package, plus the resolved write target.
 
-        ``target`` is None when a plain mutation would be ambiguous (entries in
-        several files and no --file to pick one).
+        ``entries`` lists every line whose atom refers to the package's cp —
+        exact, versioned, and slotted forms included, each with the atom as
+        written — so the user can see what to change or unset. ``managed`` and
+        ``target`` track the precise atom a mutation would edit; ``target`` is
+        None when that mutation would be ambiguous (entries in several files
+        and no --file to pick one).
         """
-        entries = self.store.scan_entries(directory, managed_atom, implicit)
+        managed_entries = self.store.scan_entries(directory, managed_atom, implicit)
+        package_entries = self.store.scan_package_entries(
+            directory, lambda atom: self.backend.atom_cp(atom) == cp, implicit
+        )
         target: str | None
-        if len(entries) == 1:
-            target = str(directory / entries[0][0])
-        elif not entries:
+        if len(managed_entries) == 1:
+            target = str(directory / managed_entries[0][0])
+        elif not managed_entries:
             target = str(directory / self.default_file(section))
         else:
             target = None
         return {
-            "managed": list(stack_values(entries)),
-            "entries": [{"file": name, "values": list(values)} for name, values in entries],
+            "managed": list(stack_values(managed_entries)),
+            "entries": [
+                {"file": name, "atom": atom, "values": list(values)}
+                for name, atom, values in package_entries
+            ],
             "target": target,
         }
 
@@ -163,7 +178,7 @@ class ReadOnlyService(_Service):
             "iuse": list(self.backend.iuse(atom)),
             "effective": list(self.backend.effective_use(atom)),
             "installed_use": list(self.backend.installed_use(atom)),
-            **self._managed_state(use_dir(self.config_root), managed_atom, (), "use"),
+            **self._managed_state(use_dir(self.config_root), managed_atom, package.cp, (), "use"),
         }
 
     def keyword_show(self, atom: str, exact: bool = False) -> dict[str, Any]:
@@ -179,7 +194,11 @@ class ReadOnlyService(_Service):
             "installed": list(package.installed_versions),
             "keywords": list(self.backend.keywords(atom)),
             **self._managed_state(
-                keyword_dir(self.config_root), managed_atom, self.keyword_implicit(), "keywords"
+                keyword_dir(self.config_root),
+                managed_atom,
+                package.cp,
+                self.keyword_implicit(),
+                "keywords",
             ),
             "legacy_package_keywords": legacy.exists(),
         }

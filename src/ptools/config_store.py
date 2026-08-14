@@ -11,6 +11,7 @@ Rules this module enforces (build_PROMPT.md §5):
 
 import os
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -139,6 +140,32 @@ class ConfigStore:
             if values:
                 entries.append((path.name, values))
         return entries
+
+    def scan_package_entries(
+        self,
+        directory: Path,
+        matcher: Callable[[str], bool],
+        implicit: tuple[str, ...] = (),
+    ) -> list[tuple[str, str, tuple[str, ...]]]:
+        """``(filename, atom-as-written, values)`` for every entry ``matcher`` accepts.
+
+        Unlike :meth:`scan_entries` this reports each matching line separately —
+        exact, versioned, and slotted atoms for the same package all show up,
+        which is what the show paths need to mirror what portage actually sees.
+        """
+        if not directory.is_dir():
+            return []
+        results: list[tuple[str, str, tuple[str, ...]]] = []
+        for path in sorted(directory.iterdir()):
+            if path.name.startswith(".") or not path.is_file():
+                continue
+            for line in parse_file(self.read(path)):
+                if line.atom is None or not matcher(line.atom):
+                    continue
+                values = line.values or implicit
+                if values:
+                    results.append((path.name, line.atom, values))
+        return results
 
     def _select(self, lines: list[ParsedLine], atom: str, file_path: Path) -> list[int]:
         indexes = [i for i, line in enumerate(lines) if line.atom == atom]

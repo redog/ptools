@@ -23,8 +23,18 @@ class PackageNotFoundError(PtoolsError):
 
 
 class AmbiguousPackageError(PtoolsError):
+    """An unqualified name matched several packages.
+
+    ``matches`` carries the candidate cps so an interactive caller can offer
+    them as a menu; the message alone stays complete for scripts.
+    """
+
     exit_code = 4
     kind = "ambiguous"
+
+    def __init__(self, message: str, matches: tuple[str, ...] = ()):
+        super().__init__(message)
+        self.matches = matches
 
 
 class AmbiguousTargetError(PtoolsError):

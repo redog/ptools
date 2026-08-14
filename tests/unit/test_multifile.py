@@ -89,8 +89,8 @@ def test_show_reports_entries_across_files(backend, keyword_dir, capsys):
     payload = pkw_json(backend, ATOM, capsys=capsys)
 
     assert payload["entries"] == [
-        {"file": "99-local", "values": ["-*"]},
-        {"file": "default", "values": ["~amd64"]},
+        {"file": "99-local", "atom": ATOM, "values": ["-*"]},
+        {"file": "default", "atom": ATOM, "values": ["~amd64"]},
     ]
     assert payload["managed"] == ["-*", "~amd64"]
     assert payload["target"] is None  # ambiguous: a mutation would need --file
@@ -101,7 +101,7 @@ def test_show_target_follows_the_single_file_with_the_entry(backend, use_dir, ca
 
     payload = puse_json(backend, ATOM, capsys=capsys)
 
-    assert payload["entries"] == [{"file": "default", "values": ["lua"]}]
+    assert payload["entries"] == [{"file": "default", "atom": ATOM, "values": ["lua"]}]
     assert payload["target"] == str(use_dir / "default")
 
 
@@ -110,7 +110,7 @@ def test_show_reports_a_bare_atom_in_a_user_file(backend, keyword_dir, capsys):
 
     payload = pkw_json(backend, ATOM, capsys=capsys)
 
-    assert payload["entries"] == [{"file": "default", "values": ["~amd64"]}]
+    assert payload["entries"] == [{"file": "default", "atom": ATOM, "values": ["~amd64"]}]
 
 
 def test_show_render_attributes_each_file(backend, keyword_dir, capsys):

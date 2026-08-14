@@ -82,6 +82,11 @@ app-editors/neovim  (app-editors/neovim-0.11.0)
   target:                 /etc/portage/package.use/ptools
 ```
 
+An unqualified name matching several packages offers them as a numbered menu
+when you are at a terminal — pick one and the command continues. In scripts,
+pipes, `--json`, or `--quiet` there is no prompt: the command fails
+deterministically with exit 4 and the candidate list on stderr.
+
 ## Dry-run examples
 
 `--dry-run` resolves the package, computes the plan, prints it, and leaves the
@@ -140,10 +145,13 @@ by `PTOOLS_CONFIG_ROOT`.
 Both directories usually hold more than one file (a `default`, a `99-local`,
 per-package files, …), and portage reads them all — so ptools does too:
 
-- **Shows read every file.** The `managed` lines report the atom's entries in
-  every file of the directory, attributed per file, in portage's sorted read
-  order. `--json` carries them as `entries` plus the stacked effective value
-  as `managed`.
+- **Shows read every file — and every atom form.** The `managed` lines report
+  the package's entries in every file of the directory, attributed per file in
+  portage's sorted read order, and include entries written against other atom
+  forms of the same package (`=cat/pkg-1.0`, `cat/pkg:0`, …), labeled with the
+  atom as written. `--json` carries them as `entries` (`file`/`atom`/`values`)
+  plus, as `managed`, the stacked effective value for the precise atom a
+  mutation would edit.
 - **Writes follow the atom.** If exactly one file already holds an entry for
   the atom, that file is edited in place. If several do, the mutation exits 4
   and lists them — pass `--file NAME` to pick one. A brand-new atom goes to
@@ -226,6 +234,9 @@ A non-zero exit is accompanied by a JSON error object on **stderr**:
 
 - `--fix-kw` (the legacy invalid-keyword cleanup) is not implemented; it is
   deferred.
+- Wildcard entries (`app-editors/*`) and nested subdirectories inside
+  `package.use/` or `package.accept_keywords/` are honoured by portage but not
+  attributed to a package by the show output.
 - A fourth legacy tool existed and is lost. No behavior was invented for it.
 - The flat-file layout is detected and refused, not converted.
 - No privilege escalation, so writing is a `sudo` away rather than automatic.
