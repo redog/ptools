@@ -11,6 +11,7 @@ from ptools.cli_common import (
     ArgumentParser,
     Output,
     add_global_options,
+    color_keyword,
     dispatch,
     render_field,
     render_init,
@@ -118,8 +119,9 @@ def render(out: Output, payload: dict[str, Any]) -> str:
     if payload["operation"] != "keyword.show":
         return render_mutation(out, payload)
     lines = [f"{out.paint(payload['atom'], 'bold')}  ({payload['cpv'] or 'no version'})"]
-    lines.append(render_field(out, "arch", payload["arch"], empty="(unknown)"))
-    lines.append(render_field(out, "ebuild keywords", payload["keywords"]))
+    lines.append(render_field(out, "arch", out.paint(payload["arch"], "bold") if payload["arch"] else "", empty="(unknown)"))
+    kw_colored = " ".join(color_keyword(out, kw) for kw in payload["keywords"])
+    lines.append(render_field(out, "ebuild keywords", kw_colored or "-"))
     lines.extend(render_managed_state(out, payload))
     if payload["legacy_package_keywords"]:
         lines.append(
