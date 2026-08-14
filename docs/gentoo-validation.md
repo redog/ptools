@@ -155,8 +155,10 @@ none of it came from a ptools-managed target.
 ## 10. A bare atom in `package.accept_keywords` really does mean `~ARCH`
 
 Measured 2026-08-12 in the same chroot (portage 3.0.81.2, profile
-`default/linux/amd64/23.0`), because the OPEN decision in `build_PROMPT.md` §3
-rests on this being true of *real* portage and not just of the wiki.
+`default/linux/amd64/23.0`), because the then-OPEN bare-atom decision (now
+settled in `docs/decisions.md`; originally tracked in `build_PROMPT.md` §3,
+since deleted — see git history) rests on this being true of *real* portage
+and not just of the wiki.
 
 Method: pick a package whose newest version is keyword-masked, then ask
 `portdb.xmatch("bestmatch-visible", …)` in a fresh process at each step.

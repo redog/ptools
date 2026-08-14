@@ -276,13 +276,18 @@ touch a legacy `package.keywords`.
 
 ## For agents / contributors
 
-**Active build instructions live in [`build_PROMPT.md`](build_PROMPT.md)** — a
-continue-from-here promptware loop with the current state, resolved decisions,
-command surface, and remaining milestones. Read it first. Supporting docs:
-[`SPEC.md`](SPEC.md), [`docs/legacy-behavior.md`](docs/legacy-behavior.md),
+The 1.0.0 roadmap is complete. **Start with
+[`docs/decisions.md`](docs/decisions.md)** — the distilled design decisions
+and their reasons; they are settled, so change behavior only with the project
+owner's say-so. Supporting records:
+[`docs/legacy-behavior.md`](docs/legacy-behavior.md),
 [`docs/environment.md`](docs/environment.md),
 [`docs/gentoo-validation.md`](docs/gentoo-validation.md), and
 [`docs/build-and-test.md`](docs/build-and-test.md).
+
+The original build documents — `SPEC.md` and `build_PROMPT.md`, the
+promptware loop that drove the build — were deleted after the 1.0.0 release;
+they live in git history and inside the `v1.0.0` tag tarball.
 
 The examples and the exit-code table above are machine-checked against the code
 by `tests/unit/test_docs.py`.

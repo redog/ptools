@@ -1,6 +1,6 @@
 """Read/modify/write the ptools-managed portage config files.
 
-Rules this module enforces (build_PROMPT.md §5):
+Rules this module enforces (docs/decisions.md, "The config store"):
 
 * comments, blank lines, and every line for another atom survive byte-for-byte;
 * duplicate atoms are an error unless the caller opts into merging;
