@@ -1,7 +1,9 @@
 """Error taxonomy.
 
 Every failure carries the process exit code it maps to, so the CLIs never have
-to re-derive the mapping. See build_PROMPT.md §4 for the authoritative table.
+to re-derive the mapping. The authoritative table is in the README (machine-
+checked against these classes by tests/unit/test_docs.py); rationale in
+docs/decisions.md.
 """
 
 

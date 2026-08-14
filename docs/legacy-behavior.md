@@ -17,7 +17,9 @@ A fourth tool existed and is lost; no behavior is invented for it.
 
 ## Modernization Decisions
 
-The authoritative list is `build_PROMPT.md` §3-§4. In summary:
+The authoritative record is `docs/decisions.md` plus the README's command
+docs (`build_PROMPT.md`, which held this during the build, is deleted — see
+git history). In summary:
 
 - `puse` and `pkw` are the only commands, and they are **first-class CLIs**, not
   wrappers: each parses its own arguments and calls the service layer directly.
